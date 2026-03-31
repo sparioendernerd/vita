@@ -6,3 +6,4 @@ local-wake>=0.1.2
 opencv-python>=4.10
 pydantic>=2.9
 python-dotenv>=1.0
+mss>=9.0

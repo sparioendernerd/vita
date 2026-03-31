@@ -16,12 +16,14 @@ class ToolHandler:
         on_end_session: Optional[Callable[[], None]] = None,
         on_enable_vision: Optional[Callable[[], None]] = None,
         on_disable_vision: Optional[Callable[[], None]] = None,
+        on_enable_screenshare: Optional[Callable[[], None]] = None,
     ):
         self.proxy = tool_proxy
         self.session = session
         self.on_end_session = on_end_session
         self.on_enable_vision = on_enable_vision
         self.on_disable_vision = on_disable_vision
+        self.on_enable_screenshare = on_enable_screenshare
 
     async def handle_tool_call(self, tool_call: Any) -> None:
         """Process a tool_call from Gemini Live and send back the response."""
@@ -72,11 +74,23 @@ class ToolHandler:
                     types.FunctionResponse(
                         id=fc.id,
                         name=fc.name,
-                        response={"result": "Vision disabled. My eye is closed."},
+                        response={"result": "Vision disabled. My eyes are closed."},
                     )
                 )
                 if self.on_disable_vision:
                     self.on_disable_vision()
+                continue
+            
+            if fc.name == "enable_screenshare":
+                responses.append(
+                    types.FunctionResponse(
+                        id=fc.id,
+                        name=fc.name,
+                        response={"result": "Screenshare enabled. Checking your monitor now!"},
+                    )
+                )
+                if self.on_enable_screenshare:
+                    self.on_enable_screenshare()
                 continue
                 
             try:

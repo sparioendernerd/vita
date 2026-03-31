@@ -21,6 +21,7 @@ from .gateway_client.tool_proxy import ToolProxy
 from .live_session.session_manager import LiveSessionManager
 from .live_session.tool_handler import ToolHandler
 from .vision.camera import Camera
+from .vision.screen_capture import ScreenCapture
 
 logging.basicConfig(
     level=logging.INFO,
@@ -77,6 +78,8 @@ class VitaNode:
 
         # Vision
         self.camera = Camera(camera_index=0, fps=1.0)
+        self.screen = ScreenCapture(fps=1.0)
+        self._vision_source = None  # "camera" or "screen"
         self._vision_enabled = False
         self._vision_task: asyncio.Task | None = None
         self._vision_timeout_task: asyncio.Task | None = None
@@ -182,6 +185,7 @@ class VitaNode:
             on_end_session=_on_end,
             on_enable_vision=self._enable_vision,
             on_disable_vision=self._disable_vision,
+            on_enable_screenshare=self._enable_screenshare,
         )
         self._tool_handler = tool_handler
 
@@ -324,28 +328,49 @@ class VitaNode:
     # ------------------------------------------------------------------
 
     def _enable_vision(self) -> None:
-        """Enable the camera and start streaming frames to Gemini."""
-        if self._vision_enabled:
-            # If already enabled, just reset the timeout
+        """Enable the physical camera and start streaming frames."""
+        self._set_vision_source("camera")
+
+    def _enable_screenshare(self) -> None:
+        """Enable the digital screenshare and start streaming frames."""
+        self._set_vision_source("screen")
+
+    def _set_vision_source(self, source: str) -> None:
+        """Switch or start the vision feed with a specific source."""
+        if self._vision_enabled and self._vision_source == source:
             self._reset_vision_timeout()
             return
 
-        logger.info("Enabling vision...")
+        logger.info(f"Setting vision source to: {source}")
+        
+        # Stop everything first to ensure clean state
+        self._disable_vision()
+
         try:
-            self.camera.start()
+            if source == "camera":
+                self.camera.start()
+            elif source == "screen":
+                self.screen.start()
+            
+            self._vision_source = source
             self._vision_enabled = True
             self._vision_task = asyncio.create_task(self._vision_forward_loop(), name="vision-drain")
             self._reset_vision_timeout()
         except Exception as e:
-            logger.error(f"Failed to start camera: {e}")
+            logger.error(f"Failed to start vision ({source}): {e}")
 
     def _disable_vision(self) -> None:
-        """Stop the camera and frame streaming."""
+        """Stop all vision feeds (camera or screen)."""
         if not self._vision_enabled:
+            # Just in case things were left half-started
+            self.camera.stop()
+            self.screen.stop()
             return
 
-        logger.info("Disabling vision...")
+        logger.info("Disabling all vision...")
         self._vision_enabled = False
+        self._vision_source = None
+        
         if self._vision_task:
             self._vision_task.cancel()
             self._vision_task = None
@@ -355,6 +380,7 @@ class VitaNode:
             self._vision_timeout_task = None
 
         self.camera.stop()
+        self.screen.stop()
 
     def _reset_vision_timeout(self) -> None:
         """Start or reset the 1-minute vision timeout."""
@@ -369,9 +395,16 @@ class VitaNode:
         self._vision_timeout_task = asyncio.create_task(_timeout(), name="vision-timeout")
 
     async def _vision_forward_loop(self) -> None:
-        """Capture frames and send them to Gemini Live."""
+        """Capture frames from the active source and send them to Gemini Live."""
         try:
-            async for frame in self.camera.stream_frames():
+            if self._vision_source == "camera":
+                stream = self.camera.stream_frames()
+            elif self._vision_source == "screen":
+                stream = self.screen.stream_frames()
+            else:
+                return
+
+            async for frame in stream:
                 if not self._vision_enabled or not self.session_mgr.is_active:
                     break
                 await self.session_mgr.send_video_frame(frame)

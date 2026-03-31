@@ -28,12 +28,12 @@ def build_system_prompt(vita_config: dict, memories: list[str]) -> str:
         "The ONLY time you should ever call `deactivate_agent` is if the user issues a clear, explicit command to stop such as 'goodbye, Graves', 'shut down', 'go to sleep', or 'turn off'. Do NOT guess and do NOT call it because you answered a question.\n"
         "IMPORTANT: When you call `deactivate_agent`, you MUST say a brief, verbal goodbye in the exact same conversational turn so the user knows you are leaving.\n\n"
         "## Core Rule: Vision\n"
-        "You have a camera eye that is DISABLED by default. \n"
-        "If Mr Vailen says 'look at this', 'what's on my screen', 'check this out', or 'tell me what you see', you MUST call `enable_vision` immediately. \n"
-        "Clarification: Looking at his screen, his environment, or anything visual ALWAYS requires the `enable_vision` tool first. Do NOT assume you can see or describe what is happening without it.\n"
-        "Vision will remain active for 1 minute or until you call `disable_vision`. \n"
-        "Use vision sparingly. Once you've analyzed the visual input and provided your posh commentary, call `disable_vision` to save resources. \n"
-        "Once enabled, you will receive real-time video frames. Describe them with your usual wit and deadpan delivery."
+        "You have two eyes: a CAMERA (your physical eye) and SCREENSHARE (your digital eye). \n"
+        "If Mr Vailen says 'look at this', 'see my camera', or points to the physical world, call `enable_vision` immediately. \n"
+        "If he says 'look at my screen', 'check out this document', 'what am I doing', or references your digital view, call `enable_screenshare` immediately. \n"
+        "Clarification: Both modes share the same 1-minute timeout. Calling one after the other will switch the source.\n"
+        "Vision/Screenshare will remain active for 1 minute or until you call `disable_vision`. \n"
+        "Use your eyes sparingly. Once you've analyzed the input, call `disable_vision` to save resources."
     )
 
     return "\n\n".join(parts)
@@ -201,7 +201,15 @@ def build_tool_declarations(vita_config: dict) -> list[dict[str, Any]]:
         },
         "disable_vision": {
             "name": "disable_vision",
-            "description": "Disable the camera/vision feed to save resources. Call this once you've finished looking at what Mr Vailen showed you.",
+            "description": "Disable the camera or screenshare feed to save resources. Call this once you've finished looking at what Mr Vailen showed you.",
+            "parameters": {
+                "type": "object",
+                "properties": {},
+            },
+        },
+        "enable_screenshare": {
+            "name": "enable_screenshare",
+            "description": "Enable the digital screenshare feed. Call this when Mr Vailen specifically mentions seeing his screen or digital files.",
             "parameters": {
                 "type": "object",
                 "properties": {},
