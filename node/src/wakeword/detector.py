@@ -39,35 +39,22 @@ class WakeWordDetector:
         self._on_detected: Callable[[], None] | None = None
         
         # Load reference samples
-        self.support_set = self._load_support_set()
-        logger.info(f"[WakeWord] Prepared {len(self.support_set)} reference samples (threshold={threshold})")
-
-    def _load_support_set():
-        # We need this to be a static-like method inside init or just a helper
-        pass
-
-    def __init__(self, reference_dir, threshold=0.2, method="embedding", buffer_size=2.0, slide_size=0.25, sample_rate=16000):
-        # Full re-init with proper loading
-        self.reference_dir = Path(reference_dir)
-        self.threshold = threshold
-        self.method = method
-        self.sample_rate = sample_rate
-        self.buffer_size_samples = int(buffer_size * sample_rate)
-        self.slide_size_samples = int(slide_size * sample_rate)
-        self.audio_buffer = np.zeros(self.buffer_size_samples, dtype=np.float32)
-        self._new_samples_count = 0
-        self._active = False
-        
         self.support_set = []
-        for file in self.reference_dir.glob("*.wav"):
-            try:
-                if method == "mfcc":
-                    feat = extract_mfcc_features(path=str(file))
-                else:
-                    feat = extract_embedding_features(path=str(file))
-                self.support_set.append((file.name, feat))
-            except Exception as e:
-                logger.error(f"[WakeWord] Failed to load {file.name}: {e}")
+        if self.reference_dir.exists():
+            for file in self.reference_dir.glob("*.wav"):
+                try:
+                    if method == "mfcc":
+                        feat = extract_mfcc_features(path=str(file))
+                    else:
+                        feat = extract_embedding_features(path=str(file))
+                    self.support_set.append((file.name, feat))
+                except Exception as e:
+                    logger.error(f"[WakeWord] Failed to load {file.name}: {e}")
+        else:
+            logger.error(f"[WakeWord] Reference directory not found: {self.reference_dir}")
+
+        logger.info(f"[WakeWord] Prepared {len(self.support_set)} reference samples (threshold={threshold}, method={method})")
+
 
     def start(self, on_detected: Callable[[], None]):
         self._on_detected = on_detected

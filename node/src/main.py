@@ -53,8 +53,17 @@ class VitaNode:
         # Components
         self.mic = MicStream(config)
         self.speaker = Speaker(config)
+        # Resolve wake word path relative to root if it's relative
+        ref_path = Path(config.wake_word_ref_dir)
+        if not ref_path.is_absolute():
+            # Try relative to root (VITA/)
+            root_dir = Path(__file__).resolve().parents[2]
+            ref_path = (root_dir / config.wake_word_ref_dir).resolve()
+        
+        logger.info(f"Loading wake word references from: {ref_path}")
+        
         self.detector = WakeWordDetector(
-            config.wake_word_ref_dir,
+            str(ref_path),
             config.wake_word_threshold,
             config.wake_word_method,
             config.wake_word_buffer_size,
@@ -473,7 +482,16 @@ class VitaNode:
 
 
 async def main():
-    load_dotenv()
+    # Find root project directory relative to this file (node/src/main.py)
+    root_dir = Path(__file__).resolve().parents[2]
+    env_path = root_dir / ".env"
+    
+    if env_path.exists():
+        load_dotenv(dotenv_path=env_path)
+        logger.info(f"Loaded environment from {env_path}")
+    else:
+        load_dotenv() 
+        logger.warning(f"Could not find root .env at {env_path}, trying default search...")
 
     config = load_config()
 
@@ -482,21 +500,16 @@ async def main():
         config.node_id = f"node-{uuid4().hex[:8]}"
         logger.info(f"Generated new Node ID: {config.node_id}. Saving to .env...")
         try:
-            env_path = Path(".env")
-            if not env_path.exists():
-                # Try parent dir if running from node/
-                env_path = Path("../../.env")
-            
-            if env_path.exists():
+            # We already have a confirmed env_path from above
+            if env_path.parent.exists():
                 set_key(str(env_path), "NODE_ID", config.node_id)
             else:
-                # Still try to save it in current dir if root not found
                 set_key(".env", "NODE_ID", config.node_id)
         except Exception as e:
             logger.warning(f"Could not save NODE_ID to .env: {e}")
 
     if not config.gemini_api_key:
-        logger.error("GEMINI_API_KEY not set")
+        logger.error(f"GEMINI_API_KEY not set (Checked ENV and {env_path})")
         sys.exit(1)
 
     logger.info(f"Starting VITA Node {config.node_id} (vita={config.vita_name})")
