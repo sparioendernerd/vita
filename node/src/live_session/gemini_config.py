@@ -240,6 +240,50 @@ def build_tool_declarations(vita_config: dict) -> list[dict[str, Any]]:
                 },
             },
         },
+        "media_play_pause": {
+            "name": "media_play_pause",
+            "description": "Toggles play/pause for the system's active media player (e.g. Spotify, YouTube).",
+            "parameters": {"type": "object", "properties": {}},
+        },
+        "media_next_track": {
+            "name": "media_next_track",
+            "description": "Skips to the next track in the system's active media player.",
+            "parameters": {"type": "object", "properties": {}},
+        },
+        "media_prev_track": {
+            "name": "media_prev_track",
+            "description": "Goes to the previous track in the system's active media player.",
+            "parameters": {"type": "object", "properties": {}},
+        },
+        "media_volume_up": {
+            "name": "media_volume_up",
+            "description": "Increases the system volume by a small increment.",
+            "parameters": {"type": "object", "properties": {}},
+        },
+        "media_volume_down": {
+            "name": "media_volume_down",
+            "description": "Decreases the system volume by a small increment.",
+            "parameters": {"type": "object", "properties": {}},
+        },
+        "list_steam_games": {
+            "name": "list_steam_games",
+            "description": "List all installed Steam games on the user's PC. Use this to see what games are available to launch.",
+            "parameters": {"type": "object", "properties": {}},
+        },
+        "launch_steam_game": {
+            "name": "launch_steam_game",
+            "description": "Launches a Steam game by its App ID. You should usually call list_steam_games first to find the correct ID.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "app_id": {
+                        "type": "string",
+                        "description": "The Steam App ID of the game to launch.",
+                    }
+                },
+                "required": ["app_id"],
+            },
+        },
     }
 
     enabled_tools = vita_config.get("tools", [])

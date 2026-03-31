@@ -1,4 +1,4 @@
-# VITA: Voice Interactive Technical Assistant
+# VITA: Voice Interactive Technical Assistant ☕
 
 VITA is a modular, high-performance voice assistant system designed to provide a personality-driven, real-time experience using the **Gemini 3.1 Flash Live** model. It features a decentralized, security-first architecture inspired by OpenClaw.
 

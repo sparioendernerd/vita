@@ -92,7 +92,48 @@ class ToolHandler:
                 if self.on_enable_screenshare:
                     self.on_enable_screenshare()
                 continue
-                
+            
+            # --- Local Node Tools ---
+            
+            if fc.name == "media_play_pause":
+                from ..tools.media import media_play_pause
+                responses.append(types.FunctionResponse(id=fc.id, name=fc.name, response=media_play_pause()))
+                continue
+
+            if fc.name == "media_next_track":
+                from ..tools.media import media_next_track
+                responses.append(types.FunctionResponse(id=fc.id, name=fc.name, response=media_next_track()))
+                continue
+
+            if fc.name == "media_prev_track":
+                from ..tools.media import media_prev_track
+                responses.append(types.FunctionResponse(id=fc.id, name=fc.name, response=media_prev_track()))
+                continue
+
+            if fc.name == "media_volume_up":
+                from ..tools.media import media_volume_up
+                responses.append(types.FunctionResponse(id=fc.id, name=fc.name, response=media_volume_up()))
+                continue
+
+            if fc.name == "media_volume_down":
+                from ..tools.media import media_volume_down
+                responses.append(types.FunctionResponse(id=fc.id, name=fc.name, response=media_volume_down()))
+                continue
+
+            if fc.name == "list_steam_games":
+                from ..tools.steam import list_steam_games
+                responses.append(types.FunctionResponse(id=fc.id, name=fc.name, response=list_steam_games()))
+                continue
+
+            if fc.name == "launch_steam_game":
+                from ..tools.steam import launch_steam_game
+                app_id = fc.args.get("app_id")
+                if not app_id:
+                    responses.append(types.FunctionResponse(id=fc.id, name=fc.name, response={"error": "Missing app_id"}))
+                else:
+                    responses.append(types.FunctionResponse(id=fc.id, name=fc.name, response=launch_steam_game(app_id)))
+                continue
+
             try:
                 result = await self.proxy.execute(fc.name, dict(fc.args) if fc.args else {})
                 responses.append(

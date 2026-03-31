@@ -287,6 +287,7 @@ class VitaNode:
                         pass
 
             self.speaker.stop()
+            self._disable_vision()
             await self.gateway.notify_session_end(reason)
 
             self.state = "idle"
