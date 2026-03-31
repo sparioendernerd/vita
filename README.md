@@ -41,10 +41,10 @@ VITA is evolving into a more powerful, centralized AI hub.
 - [x] Public `tailscale funnel` support with enforced password auth
 - [x] Automated lifecycle management
 
-### Phase 3: Knowledge Hub Expansion 🔄
+### Phase 3: Knowledge Hub Expansion ✅
 - [x] Persistent session transcripts (JSONL)
-- [ ] Vector database integration (Chroma/Milvus) for semantic memory
-- [ ] Document/URL ingestion pipeline
+- [x] Vector database integration (Chroma) for semantic memory
+- [x] Document/URL ingestion pipeline
 
 ### Phase 4: Node Execution ✅
 - [x] `system_run` tool for remote host control

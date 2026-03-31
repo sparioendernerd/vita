@@ -19,6 +19,7 @@ import { makeTextModelFn } from "../gemini/text-client.js";
 import { executeSystemRun } from "../tools/system-run.js";
 import { sendSystemNotify } from "../tools/system-notify.js";
 import { appendTranscript } from "../knowledge/transcript-logger.js";
+import { ingestContent } from "../knowledge/ingest.js";
 import type { GatewayConfig } from "../config/gateway-config.js";
 
 export type MessageHandler = (node: NodeConnection, msg: ProtocolMessage) => void;
@@ -51,7 +52,7 @@ export function createHandlers(
 
       logger.info(`Session start requested by ${node.id.substring(0, 8)}... for VITA ${vita.displayName}`);
 
-      const store = getMemoryStore(vita.name);
+      const store = getMemoryStore(vita.name, geminiApiKey);
       const memories: string[] = store.getSessionContext(vita.name, 12).map((m) => m.content);
 
       // Track session
@@ -72,7 +73,7 @@ export function createHandlers(
 
       // Decay old memories on session end
       try {
-        getMemoryStore(node.vitaName).applyImportanceDecay(node.vitaName);
+        getMemoryStore(node.vitaName, geminiApiKey).applyImportanceDecay(node.vitaName);
       } catch (err) {
         logger.error(`[memory] Decay failed for ${node.vitaName}: ${err}`);
       }
@@ -84,7 +85,7 @@ export function createHandlers(
       const payload = msg.payload as ToolRequestPayload;
       logger.info(`Tool request from ${node.id.substring(0, 8)}...: ${payload.toolName}(${JSON.stringify(payload.args)})`);
 
-      const store = getMemoryStore(node.vitaName);
+      const store = getMemoryStore(node.vitaName, geminiApiKey);
       let result: unknown;
 
       const handleAsync = async () => {
@@ -105,7 +106,7 @@ export function createHandlers(
             );
             result = { memories };
           } else if (payload.toolName === "search_memory") {
-            const memories = store.searchMemory(
+            const memories = await store.searchMemory(
               node.vitaName,
               payload.args.query as string,
               payload.args.limit as number | undefined
@@ -154,6 +155,25 @@ export function createHandlers(
               lastSeen: new Date(n.lastHeartbeat).toISOString(),
             }));
             result = { nodes };
+          } else if (payload.toolName === "ingest_knowledge") {
+            const { url, content, tags = [] } = payload.args as any;
+            const ingestResult = await ingestContent(url, content);
+            if (ingestResult.success && ingestResult.content) {
+              const memoryId = store.writeMemory(
+                node.vitaName,
+                "world-knowledge",
+                `Document: ${ingestResult.title}\nSource: ${ingestResult.source}\nContent: ${ingestResult.content.substring(0, 5000)}`,
+                ["ingested", ...tags]
+              );
+              result = {
+                success: true,
+                title: ingestResult.title,
+                id: memoryId.id,
+                message: `Knowledge ingested successfully into long-term memory.`
+              };
+            } else {
+              result = { success: false, error: ingestResult.error };
+            }
           } else {
             result = { message: `Unknown tool: ${payload.toolName}` };
           }
@@ -217,12 +237,12 @@ export function createHandlers(
 
     // ── Knowledge (new) ──────────────────────────────────────────────────
 
-    "knowledge:query": (node, msg) => {
+    "knowledge:query": async (node, msg) => {
       const payload = msg.payload as KnowledgeQueryPayload;
-      const store = getMemoryStore(node.vitaName);
+      const store = getMemoryStore(node.vitaName, geminiApiKey);
 
       try {
-        const memories = store.searchMemory(node.vitaName, payload.query, payload.limit ?? 10);
+        const memories = await store.searchMemory(node.vitaName, payload.query, payload.limit ?? 10);
         server.sendToNode(
           node.id,
           createMessage("knowledge:result", {

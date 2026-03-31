@@ -2,6 +2,7 @@ import Database from "better-sqlite3";
 import { v4 as uuid } from "uuid";
 import { logger } from "../logger.js";
 import { SCHEMA_SQL } from "./schema.js";
+import { VectorStore } from "./vector.js";
 
 export interface Memory {
   id: string;
@@ -59,12 +60,20 @@ function rowToMemory(row: DbRow): Memory {
 
 export class MemoryStore {
   private db: Database.Database;
+  private vector: VectorStore | null = null;
+  private vitaName: string;
 
-  constructor(dbPath: string) {
+  constructor(dbPath: string, vitaName: string, apiKey?: string) {
+    this.vitaName = vitaName;
     this.db = new Database(dbPath);
     this.db.pragma("journal_mode = WAL");
     this.db.pragma("foreign_keys = ON");
     this.db.exec(SCHEMA_SQL);
+
+    if (apiKey) {
+      this.vector = new VectorStore(apiKey, vitaName);
+      logger.info(`[memory] Vector store initialized for ${vitaName}`);
+    }
   }
 
   close(): void {
@@ -89,6 +98,20 @@ export class MemoryStore {
            VALUES (?, ?, ?, ?, ?, ?, ?, 0, ?, 0, '[]')`
         )
         .run(id, vitaName, category, content, JSON.stringify(tags), now, Math.min(0.9, Math.max(0.1, importance)), now);
+
+      // Sync to vector store
+      if (this.vector) {
+        const impValue = Math.min(0.9, Math.max(0.1, importance));
+        this.vector.addMemory(id, content, {
+          id,
+          vitaName,
+          category,
+          timestamp: now,
+          tags,
+          importance: impValue
+        }).catch(err => logger.error(`[memory] Vector sync failed: ${err.message}`));
+      }
+
       logger.info(`[memory] Saved to ${category} for ${vitaName}: ${content.substring(0, 50)}...`);
       return { success: true, id };
     } catch (err: any) {
@@ -97,7 +120,6 @@ export class MemoryStore {
     }
   }
 
-  // Used by migration — inserts with explicit ID and no access bump
   public importLegacy(m: {
     id: string;
     vitaName: string;
@@ -129,6 +151,18 @@ export class MemoryStore {
         m.isSummary ? 1 : 0,
         JSON.stringify(m.sourceIds)
       );
+    
+    // Also try to index in vector store if available
+    if (this.vector) {
+        this.vector.addMemory(m.id, m.content, {
+            id: m.id,
+            vitaName: m.vitaName,
+            category: m.category,
+            timestamp: m.timestamp,
+            tags: m.tags,
+            importance: m.importance
+        }).catch(() => {}); // Silent for bulk imports
+    }
   }
 
   // ── Read ───────────────────────────────────────────────────────────────────
@@ -136,7 +170,6 @@ export class MemoryStore {
   public readMemory(vitaName: string, category: string, query?: string): Memory[] {
     let rows: DbRow[];
     if (query) {
-      // FTS5 search scoped to the category
       rows = this.db
         .prepare(
           `SELECT m.* FROM memories m
@@ -155,8 +188,9 @@ export class MemoryStore {
     return rows.map(rowToMemory);
   }
 
-  public searchMemory(vitaName: string, query: string, limit = 10): Memory[] {
-    const rows = this.db
+  public async searchMemory(vitaName: string, query: string, limit = 10): Promise<Memory[]> {
+    // 1. Keyword/FTS search
+    const ftsRows = this.db
       .prepare(
         `SELECT m.* FROM memories m
          JOIN memories_fts ON memories_fts.rowid = m.rowid
@@ -165,16 +199,48 @@ export class MemoryStore {
          LIMIT ?`
       )
       .all(vitaName, query, limit) as DbRow[];
-    this.bumpAccess(rows);
-    return rows.map(rowToMemory);
+
+    // 2. Semantic/Vector search
+    let vectorResults: { id: string }[] = [];
+    if (this.vector) {
+      vectorResults = await this.vector.search(query, limit);
+    }
+
+    // 3. Merge results
+    const combinedMap = new Map<string, DbRow>();
+    
+    // Add FTS results first
+    for (const row of ftsRows) {
+      combinedMap.set(row.id, row);
+    }
+
+    // Add vector results (fetch from DB if not already in set)
+    if (vectorResults.length > 0) {
+      const missingIds = vectorResults
+        .map(v => v.id)
+        .filter(id => !combinedMap.has(id));
+
+      if (missingIds.length > 0) {
+        const placeholders = missingIds.map(() => "?").join(",");
+        const missingRows = this.db
+          .prepare(`SELECT * FROM memories WHERE id IN (${placeholders}) AND vita_name = ?`)
+          .all(...missingIds, vitaName) as DbRow[];
+        
+        for (const row of missingRows) {
+          combinedMap.set(row.id, row);
+        }
+      }
+    }
+
+    const finalRows = Array.from(combinedMap.values());
+    this.bumpAccess(finalRows);
+    return finalRows.map(rowToMemory);
   }
 
-  // Backward-compat: returns top-importance core memories as strings
   public getCoreMemories(vitaName: string): string[] {
     return this.getSessionContext(vitaName, 12).map((m) => m.content);
   }
 
-  // Smart session-start loading: top-N across all categories by composite score
   public getSessionContext(vitaName: string, topN = 12): SessionContextMemory[] {
     const now = Date.now();
     const rows = this.db
@@ -214,7 +280,7 @@ export class MemoryStore {
   }
 
   public applyImportanceDecay(vitaName: string): void {
-    const cutoff = Date.now() - 14 * 24 * 60 * 60 * 1000; // 14 days
+    const cutoff = Date.now() - 14 * 24 * 60 * 60 * 1000;
     const { changes } = this.db
       .prepare(
         `UPDATE memories
@@ -294,6 +360,18 @@ export class MemoryStore {
       for (const id of sourceIds) demote.run(id);
     })();
 
+    // Index summary in vector store
+    if (this.vector) {
+        this.vector.addMemory(summaryId, summaryText, {
+            id: summaryId,
+            vitaName,
+            category: 'core',
+            timestamp: now,
+            tags: ['consolidated'],
+            importance: 0.8
+        }).catch(() => {});
+    }
+
     logger.info(`[memory] Consolidated ${rows.length} ${category} memories into summary ${summaryId} for ${vitaName}`);
     return { summaryId, archivedCount: rows.length, newSummaryContent: summaryText };
   }
@@ -304,6 +382,12 @@ export class MemoryStore {
     const { changes } = this.db
       .prepare(`DELETE FROM memories WHERE id = ? AND vita_name = ?`)
       .run(id, vitaName);
+    
+    if (changes > 0 && this.vector) {
+      this.vector.deleteMemory(id).catch(err => 
+        logger.error(`[memory] Failed to delete from vector store: ${err.message}`)
+      );
+    }
     return changes > 0;
   }
 }

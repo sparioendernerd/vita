@@ -6,11 +6,11 @@ import { migrateIfNeeded } from "./migrate.js";
 
 const stores = new Map<string, MemoryStore>();
 
-export function getMemoryStore(vitaName: string): MemoryStore {
+export function getMemoryStore(vitaName: string, apiKey?: string): MemoryStore {
   if (!stores.has(vitaName)) {
     const dir = join(homedir(), ".vita", vitaName);
     mkdirSync(dir, { recursive: true });
-    const store = new MemoryStore(join(dir, "memories.db"));
+    const store = new MemoryStore(join(dir, "memories.db"), vitaName, apiKey);
     migrateIfNeeded(vitaName, store);
     stores.set(vitaName, store);
   }

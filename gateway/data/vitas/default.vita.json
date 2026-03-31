@@ -24,7 +24,8 @@
     "system_list_nodes",
     "enable_vision",
     "enable_screenshare",
-    "disable_vision"
+    "disable_vision",
+    "ingest_knowledge"
   ],
   "discordChannels": [],
   "scheduledTasks": []

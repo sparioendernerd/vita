@@ -36,7 +36,7 @@ def build_system_prompt(vita_config: dict, memories: list[str]) -> str:
         "   - Map phrases like: 'What's on my screen?', 'Look at this code', 'Check out this document', 'What am I doing?', 'See this website?'.\n"
         "   - Use this for anything happening on his computer desktop.\n\n"
         "Clarification: Both modes share a 1-minute timeout. Calling one switches the source from the other. \n"
-        "Once you've analyzed the input and delivered your posh commentary, call `disable_vision` to be a good steward of resources."
+        "Vision/Screenshare stays ON automatically for 1 minute. Do NOT call `disable_vision` yourself unless Mr Vailen explicitly says 'stop looking', 'stop sharing', or 'close your eye'. Otherwise, just let the timer handle it."
     )
 
     return "\n\n".join(parts)
@@ -216,6 +216,28 @@ def build_tool_declarations(vita_config: dict) -> list[dict[str, Any]]:
             "parameters": {
                 "type": "object",
                 "properties": {},
+            },
+        },
+        "ingest_knowledge": {
+            "name": "ingest_knowledge",
+            "description": "Ingest information from a URL or raw text into your long-term memory. Use this to 'learn' new things or save documents.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "url": {
+                        "type": "string",
+                        "description": "The URL to fetch and ingest content from.",
+                    },
+                    "content": {
+                        "type": "string",
+                        "description": "Raw text content to ingest directly.",
+                    },
+                    "tags": {
+                        "type": "array",
+                        "items": {"type": "string"},
+                        "description": "Optional tags for the ingested content.",
+                    },
+                },
             },
         },
     }

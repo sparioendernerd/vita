@@ -14,7 +14,10 @@
   },
   "dependencies": {
     "@google/genai": "^1.47.0",
+    "@google/generative-ai": "^0.24.1",
     "better-sqlite3": "^12.8.0",
+    "cheerio": "^1.0.0-rc.12",
+    "chromadb": "^3.4.0",
     "discord.js": "^14.16.0",
     "dotenv": "^17.3.1",
     "node-cron": "^3.0.0",
