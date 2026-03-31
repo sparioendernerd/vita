@@ -9,7 +9,7 @@ from uuid import uuid4
 from google import genai
 from google.genai import types
 
-from dotenv import load_dotenv
+from dotenv import load_dotenv, set_key
 
 from .config import load_config, NodeConfig
 from .audio.mic_stream import MicStream
@@ -477,9 +477,23 @@ async def main():
 
     config = load_config()
 
-    # Generate node ID if not set
+    # Generate node ID if not set and persist it
     if not config.node_id:
         config.node_id = f"node-{uuid4().hex[:8]}"
+        logger.info(f"Generated new Node ID: {config.node_id}. Saving to .env...")
+        try:
+            env_path = Path(".env")
+            if not env_path.exists():
+                # Try parent dir if running from node/
+                env_path = Path("../../.env")
+            
+            if env_path.exists():
+                set_key(str(env_path), "NODE_ID", config.node_id)
+            else:
+                # Still try to save it in current dir if root not found
+                set_key(".env", "NODE_ID", config.node_id)
+        except Exception as e:
+            logger.warning(f"Could not save NODE_ID to .env: {e}")
 
     if not config.gemini_api_key:
         logger.error("GEMINI_API_KEY not set")
