@@ -129,8 +129,11 @@ function getEnvOverrides(): Record<string, unknown> {
     overrides.gateway = { ...(overrides.gateway as Record<string, unknown> || {}), port: Number(process.env.GATEWAY_PORT) };
   }
   if (process.env.GATEWAY_HOST) {
-    const host = process.env.GATEWAY_HOST;
-    const bind = host === "0.0.0.0" ? "lan" : host === "127.0.0.1" ? "loopback" : "loopback";
+    const host = process.env.GATEWAY_HOST.trim();
+    let bind: "loopback" | "lan" = "loopback";
+    if (host === "0.0.0.0") bind = "lan";
+    else if (host === "127.0.0.1" || host === "localhost") bind = "loopback";
+    
     overrides.gateway = { ...(overrides.gateway as Record<string, unknown> || {}), bind };
   }
   if (process.env.VITA_GATEWAY_TOKEN) {

@@ -11,10 +11,25 @@ import { VitaRegistry } from "./config/vita-registry.js";
 import { GatewayServer } from "./websocket/server.js";
 import { loadOrCreateToken } from "./auth/token-manager.js";
 import { setupTailscale, teardownTailscale } from "./network/tailscale.js";
+import { existsSync } from "node:fs";
 import { logger } from "./logger.js";
 
+// ── Environment Setup ────────────────────────────────────────────────────────
+// Try loading .env from root, then from current directory
 const __dirname = dirname(fileURLToPath(import.meta.url));
-dotenv.config({ path: resolve(__dirname, "../../.env") });
+const rootEnv = resolve(__dirname, "../../.env");
+const localEnv = resolve(process.cwd(), ".env");
+
+if (existsSync(rootEnv)) {
+  dotenv.config({ path: rootEnv });
+  logger.info(`Loaded environment from project root: ${rootEnv}`);
+} else if (existsSync(localEnv)) {
+  dotenv.config({ path: localEnv });
+  logger.info(`Loaded environment from CWD: ${localEnv}`);
+} else {
+  dotenv.config(); // Fallback to default behavior
+  logger.warn("No .env file found in expected root or local paths. Using system environment.");
+}
 
 async function main() {
   logger.info("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
