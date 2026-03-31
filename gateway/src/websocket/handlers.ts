@@ -145,6 +145,15 @@ export function createHandlers(
               body: payload.args.body as string,
               urgency: payload.args.urgency as "low" | "normal" | "critical" | undefined,
             });
+          } else if (payload.toolName === "system_list_nodes") {
+            const nodes = server.getConnectedNodes().map((n) => ({
+              id: n.id,
+              name: n.vitaName,
+              capabilities: n.capabilities,
+              state: n.state,
+              lastSeen: new Date(n.lastHeartbeat).toISOString(),
+            }));
+            result = { nodes };
           } else {
             result = { message: `Unknown tool: ${payload.toolName}` };
           }

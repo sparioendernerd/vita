@@ -131,6 +131,59 @@ def build_tool_declarations(vita_config: dict) -> list[dict[str, Any]]:
                 "required": [],
             },
         },
+        "system_run": {
+            "name": "system_run",
+            "description": "Execute a terminal command on your own Linux host (the Gateway PC). Use this for file management, system checks, or running scripts. Use /bin/bash syntax.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "command": {
+                        "type": "string",
+                        "description": "The shell command to execute.",
+                    },
+                    "cwd": {
+                        "type": "string",
+                        "description": "Optional working directory.",
+                    },
+                    "timeout": {
+                        "type": "integer",
+                        "description": "Timeout in milliseconds (default: 30000).",
+                    },
+                },
+                "required": ["command"],
+            },
+        },
+        "system_notify": {
+            "name": "system_notify",
+            "description": "Send a desktop notification to your host system to alert the user.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "title": {
+                        "type": "string",
+                        "description": "Short title of the notification.",
+                    },
+                    "body": {
+                        "type": "string",
+                        "description": "The main text of the notification.",
+                    },
+                    "urgency": {
+                        "type": "string",
+                        "enum": ["low", "normal", "critical"],
+                        "description": "Urgency level.",
+                    },
+                },
+                "required": ["title", "body"],
+            },
+        },
+        "system_list_nodes": {
+            "name": "system_list_nodes",
+            "description": "List all connected VITA nodes. Use this to see what devices are active in your network.",
+            "parameters": {
+                "type": "object",
+                "properties": {},
+            },
+        },
     }
 
     enabled_tools = vita_config.get("tools", [])
