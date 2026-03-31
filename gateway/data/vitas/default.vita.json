@@ -21,7 +21,9 @@
     "google_search",
     "system_run",
     "system_notify",
-    "system_list_nodes"
+    "system_list_nodes",
+    "enable_vision",
+    "disable_vision"
   ],
   "discordChannels": [],
   "scheduledTasks": []

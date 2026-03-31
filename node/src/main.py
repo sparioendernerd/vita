@@ -20,6 +20,7 @@ from .gateway_client.ws_client import GatewayClient
 from .gateway_client.tool_proxy import ToolProxy
 from .live_session.session_manager import LiveSessionManager
 from .live_session.tool_handler import ToolHandler
+from .vision.camera import Camera
 
 logging.basicConfig(
     level=logging.INFO,
@@ -73,6 +74,12 @@ class VitaNode:
         self.gateway = GatewayClient(config.gateway_url, config.node_id, config.vita_name, config.gateway_token)
         self.tool_proxy = ToolProxy(self.gateway)
         self.session_mgr = LiveSessionManager(config.gemini_api_key)
+
+        # Vision
+        self.camera = Camera(camera_index=0, fps=1.0)
+        self._vision_enabled = False
+        self._vision_task: asyncio.Task | None = None
+        self._vision_timeout_task: asyncio.Task | None = None
 
         # Sounds
         self.start_beep = get_start_sound(config.speaker_sample_rate)
@@ -169,7 +176,13 @@ class VitaNode:
             loop = asyncio.get_event_loop()
             loop.call_soon_threadsafe(self.end_session_event.set)
 
-        tool_handler = ToolHandler(self.tool_proxy, self.session_mgr.session, on_end_session=_on_end)
+        tool_handler = ToolHandler(
+            self.tool_proxy,
+            self.session_mgr.session,
+            on_end_session=_on_end,
+            on_enable_vision=self._enable_vision,
+            on_disable_vision=self._disable_vision,
+        )
         self._tool_handler = tool_handler
 
         self.state = "conversing"
@@ -305,6 +318,68 @@ class VitaNode:
             if elapsed > self.config.silence_timeout:
                 logger.info(f"Silence timeout ({self.config.silence_timeout}s)")
                 return
+
+    # ------------------------------------------------------------------
+    # Vision
+    # ------------------------------------------------------------------
+
+    def _enable_vision(self) -> None:
+        """Enable the camera and start streaming frames to Gemini."""
+        if self._vision_enabled:
+            # If already enabled, just reset the timeout
+            self._reset_vision_timeout()
+            return
+
+        logger.info("Enabling vision...")
+        try:
+            self.camera.start()
+            self._vision_enabled = True
+            self._vision_task = asyncio.create_task(self._vision_forward_loop(), name="vision-drain")
+            self._reset_vision_timeout()
+        except Exception as e:
+            logger.error(f"Failed to start camera: {e}")
+
+    def _disable_vision(self) -> None:
+        """Stop the camera and frame streaming."""
+        if not self._vision_enabled:
+            return
+
+        logger.info("Disabling vision...")
+        self._vision_enabled = False
+        if self._vision_task:
+            self._vision_task.cancel()
+            self._vision_task = None
+        
+        if self._vision_timeout_task:
+            self._vision_timeout_task.cancel()
+            self._vision_timeout_task = None
+
+        self.camera.stop()
+
+    def _reset_vision_timeout(self) -> None:
+        """Start or reset the 1-minute vision timeout."""
+        if self._vision_timeout_task:
+            self._vision_timeout_task.cancel()
+        
+        async def _timeout():
+            await asyncio.sleep(60)
+            logger.info("Vision timeout (1 minute) — auto-disabling")
+            self._disable_vision()
+
+        self._vision_timeout_task = asyncio.create_task(_timeout(), name="vision-timeout")
+
+    async def _vision_forward_loop(self) -> None:
+        """Capture frames and send them to Gemini Live."""
+        try:
+            async for frame in self.camera.stream_frames():
+                if not self._vision_enabled or not self.session_mgr.is_active:
+                    break
+                await self.session_mgr.send_video_frame(frame)
+        except asyncio.CancelledError:
+            pass
+        except Exception as e:
+            logger.error(f"Vision loop error: {e}")
+            self._disable_vision()
 
     # ------------------------------------------------------------------
     # Medal clip watcher
@@ -473,6 +548,7 @@ class VitaNode:
         if self.session_mgr.is_active:
             await self.session_mgr.close()
         self.speaker.stop()
+        self._disable_vision()
 
         # Give the lwake listener thread one slide-window to notice _running=False
         # and exit its read loop cleanly before we kill PortAudio underneath it.

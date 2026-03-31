@@ -9,10 +9,19 @@ logger = logging.getLogger(__name__)
 class ToolHandler:
     """Handles Gemini Live tool calls by proxying them through the gateway."""
 
-    def __init__(self, tool_proxy: ToolProxy, session: Any, on_end_session: Optional[Callable[[], None]] = None):
+    def __init__(
+        self,
+        tool_proxy: ToolProxy,
+        session: Any,
+        on_end_session: Optional[Callable[[], None]] = None,
+        on_enable_vision: Optional[Callable[[], None]] = None,
+        on_disable_vision: Optional[Callable[[], None]] = None,
+    ):
         self.proxy = tool_proxy
         self.session = session
         self.on_end_session = on_end_session
+        self.on_enable_vision = on_enable_vision
+        self.on_disable_vision = on_disable_vision
 
     async def handle_tool_call(self, tool_call: Any) -> None:
         """Process a tool_call from Gemini Live and send back the response."""
@@ -44,6 +53,30 @@ class ToolHandler:
                 )
                 if self.on_end_session:
                     self.on_end_session()
+                continue
+            
+            if fc.name == "enable_vision":
+                responses.append(
+                    types.FunctionResponse(
+                        id=fc.id,
+                        name=fc.name,
+                        response={"result": "Vision enabled. I can see you now!"},
+                    )
+                )
+                if self.on_enable_vision:
+                    self.on_enable_vision()
+                continue
+
+            if fc.name == "disable_vision":
+                responses.append(
+                    types.FunctionResponse(
+                        id=fc.id,
+                        name=fc.name,
+                        response={"result": "Vision disabled. My eye is closed."},
+                    )
+                )
+                if self.on_disable_vision:
+                    self.on_disable_vision()
                 continue
                 
             try:
