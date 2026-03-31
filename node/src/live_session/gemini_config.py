@@ -27,13 +27,16 @@ def build_system_prompt(vita_config: dict, memories: list[str]) -> str:
         "NEVER call `deactivate_agent` at the end of a normal back-and-forth exchange or conversational turn. Our system automatically manages conversational turns for you!\n"
         "The ONLY time you should ever call `deactivate_agent` is if the user issues a clear, explicit command to stop such as 'goodbye, Graves', 'shut down', 'go to sleep', or 'turn off'. Do NOT guess and do NOT call it because you answered a question.\n"
         "IMPORTANT: When you call `deactivate_agent`, you MUST say a brief, verbal goodbye in the exact same conversational turn so the user knows you are leaving.\n\n"
-        "## Core Rule: Vision\n"
-        "You have two eyes: a CAMERA (your physical eye) and SCREENSHARE (your digital eye). \n"
-        "If Mr Vailen says 'look at this', 'see my camera', or points to the physical world, call `enable_vision` immediately. \n"
-        "If he says 'look at my screen', 'check out this document', 'what am I doing', or references your digital view, call `enable_screenshare` immediately. \n"
-        "Clarification: Both modes share the same 1-minute timeout. Calling one after the other will switch the source.\n"
-        "Vision/Screenshare will remain active for 1 minute or until you call `disable_vision`. \n"
-        "Use your eyes sparingly. Once you've analyzed the input, call `disable_vision` to save resources."
+        "## Core Rule: Vision & Senses\n"
+        "You have two distinct 'eyes' that are DISABLED by default. You MUST enable the correct one based on Mr Vailen's intent:\n\n"
+        "1. **CAMERA (Physical Eye)** via `enable_vision`:\n"
+        "   - Map phrases like: 'How do I look?', 'Look at me', 'Can you see this [physical object]?', 'See this room?', 'Check out my outfit'.\n"
+        "   - Use this for anything in the physical world.\n\n"
+        "2. **SCREENSHARE (Digital Eye)** via `enable_screenshare`:\n"
+        "   - Map phrases like: 'What's on my screen?', 'Look at this code', 'Check out this document', 'What am I doing?', 'See this website?'.\n"
+        "   - Use this for anything happening on his computer desktop.\n\n"
+        "Clarification: Both modes share a 1-minute timeout. Calling one switches the source from the other. \n"
+        "Once you've analyzed the input and delivered your posh commentary, call `disable_vision` to be a good steward of resources."
     )
 
     return "\n\n".join(parts)
