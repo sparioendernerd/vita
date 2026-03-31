@@ -22,6 +22,7 @@ class NodeConfig(BaseModel):
     wake_word_method: str = "embedding"    # 'embedding' (default) or 'mfcc'
     wake_word_buffer_size: float = 2.0     # seconds — should match max recording length
     wake_word_slide_size: float = 0.25     # seconds — lower = more precise but higher CPU
+    wake_word_debug: bool = False          # log volume/distance periodically
 
     # Session
     silence_timeout: float = 30.0  # seconds of silence before ending session
@@ -53,5 +54,6 @@ def load_config() -> NodeConfig:
         wake_word_method=os.getenv("WAKE_WORD_METHOD", "embedding"),
         wake_word_buffer_size=float(os.getenv("WAKE_WORD_BUFFER_SIZE", "2.0")),
         wake_word_slide_size=float(os.getenv("WAKE_WORD_SLIDE_SIZE", "0.25")),
+        wake_word_debug=os.getenv("WAKE_WORD_DEBUG", "False").lower() == "true",
         medal_clips_dir=os.getenv("MEDAL_CLIPS_DIR", r"C:\Medal\Clips"),
     )

@@ -22,12 +22,14 @@ class WakeWordDetector:
         method: str = "embedding",
         buffer_size: float = 2.0,
         slide_size: float = 0.25,
-        sample_rate: int = 16000
+        sample_rate: int = 16000,
+        debug_mode: bool = False
     ):
         self.reference_dir = Path(reference_dir)
         self.threshold = threshold
         self.method = method
         self.sample_rate = sample_rate
+        self.debug_mode = debug_mode
         
         # Buffer management
         self.buffer_size_samples = int(buffer_size * sample_rate)
@@ -56,10 +58,15 @@ class WakeWordDetector:
         logger.info(f"[WakeWord] Prepared {len(self.support_set)} reference samples (threshold={threshold}, method={method})")
 
 
+        self._last_debug_time = 0
+        self._best_dist_window = 1.0
+
     def start(self, on_detected: Callable[[], None]):
         self._on_detected = on_detected
         self._active = True
         self._new_samples_count = 0
+        self._last_debug_time = time.time()
+        self._best_dist_window = 1.0
         logger.info("[WakeWord] Detector active (waiting for frames)")
 
     def stop(self):
@@ -87,6 +94,9 @@ class WakeWordDetector:
 
     def _check_matches(self):
         try:
+            # Volume check
+            rms = np.sqrt(np.mean(self.audio_buffer**2))
+            
             if self.method == "mfcc":
                 features = extract_mfcc_features(y=self.audio_buffer, sample_rate=self.sample_rate)
             else:
@@ -97,12 +107,25 @@ class WakeWordDetector:
 
             for name, ref_feat in self.support_set:
                 distance = dtw_cosine_normalized_distance(features, ref_feat)
+                if distance < self._best_dist_window:
+                    self._best_dist_window = distance
+                    self._best_match_name = name
+
                 if distance < self.threshold:
-                    logger.info(f"[WakeWord] Triggered: {name} (dist={distance:.4f})")
+                    logger.info(f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+                    logger.info(f" 🔥 Wake Word Triggered: {name} (dist={distance:.4f})")
+                    logger.info(f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
                     if self._on_detected:
-                        # Clear buffer to prevent immediate re-trigger
                         self.audio_buffer.fill(0)
                         self._on_detected()
                     return
+
+            # Periodic debug log
+            now = time.time()
+            if self.debug_mode and now - self._last_debug_time > 3.0:
+                logger.info(f"[WakeWord Debug] Vol={rms:.4f} | Best Dist={self._best_dist_window:.4f} ({self._best_match_name or 'none'})")
+                self._last_debug_time = now
+                self._best_dist_window = 1.0  # Reset for next window
+                self._best_match_name = None
         except Exception as e:
             logger.error(f"[WakeWord] Error during matching: {e}")

@@ -68,6 +68,7 @@ class VitaNode:
             config.wake_word_method,
             config.wake_word_buffer_size,
             config.wake_word_slide_size,
+            debug_mode=config.wake_word_debug,
         )
         self.gateway = GatewayClient(config.gateway_url, config.node_id, config.vita_name, config.gateway_token)
         self.tool_proxy = ToolProxy(self.gateway)
