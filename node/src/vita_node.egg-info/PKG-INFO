@@ -1,0 +1,16 @@
+Metadata-Version: 2.4
+Name: vita-node
+Version: 0.1.0
+Summary: VITA Node - Gemini Live voice/vision agent endpoint
+Requires-Python: >=3.11
+Requires-Dist: google-genai>=1.47.0
+Requires-Dist: websockets>=13.0
+Requires-Dist: PyAudio>=0.2.14
+Requires-Dist: numpy>=1.26
+Requires-Dist: local-wake>=0.1.2
+Requires-Dist: opencv-python>=4.10
+Requires-Dist: pydantic>=2.9
+Requires-Dist: python-dotenv>=1.0
+Provides-Extra: dev
+Requires-Dist: pytest>=8.0; extra == "dev"
+Requires-Dist: pytest-asyncio>=0.24; extra == "dev"

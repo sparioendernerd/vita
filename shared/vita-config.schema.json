@@ -1,0 +1,34 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "VitaConfig",
+  "type": "object",
+  "required": ["name", "displayName", "personality", "systemInstructions", "voicePrompt", "voiceName"],
+  "properties": {
+    "name": { "type": "string", "pattern": "^[a-z][a-z0-9_-]*$" },
+    "displayName": { "type": "string" },
+    "personality": { "type": "string" },
+    "systemInstructions": { "type": "string" },
+    "voicePrompt": { "type": "string" },
+    "voiceName": { "type": "string" },
+    "liveModel": { "type": "string", "default": "gemini-3.1-flash-live-preview" },
+    "textModel": { "type": "string", "default": "gemini-2.5-flash" },
+    "heartbeatModel": { "type": "string", "default": "ollama/gemma3" },
+    "heartbeatOllamaUrl": { "type": "string", "default": "http://localhost:11434" },
+    "wakeWords": { "type": "array", "items": { "type": "string" }, "default": ["hey_vita"] },
+    "tools": { "type": "array", "items": { "type": "string" }, "default": ["read_memory", "write_memory", "search_memory", "get_current_time"] },
+    "discordChannels": { "type": "array", "items": { "type": "string" }, "default": [] },
+    "scheduledTasks": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["cron", "action"],
+        "properties": {
+          "cron": { "type": "string" },
+          "action": { "type": "string" },
+          "description": { "type": "string" }
+        }
+      },
+      "default": []
+    }
+  }
+}

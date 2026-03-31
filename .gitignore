@@ -1,0 +1,33 @@
+# Dependencies
+node_modules/
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# Environment
+.env
+
+# Build
+gateway/dist/
+*.js.map
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+
+# Wake word models (user-trained, can be large)
+node/src/wakeword/models/*.tflite
+!node/src/wakeword/models/.gitkeep
+
+# Wake word reference recordings (user-specific voice samples)
+node/src/wakeword/refs/*.wav
+!node/src/wakeword/refs/.gitkeep
+
+# Memory data (runtime generated)
+gateway/data/memory/**/*.json
+!gateway/data/memory/.gitkeep

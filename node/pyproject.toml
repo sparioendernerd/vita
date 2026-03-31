@@ -1,0 +1,21 @@
+[project]
+name = "vita-node"
+version = "0.1.0"
+description = "VITA Node - Gemini Live voice/vision agent endpoint"
+requires-python = ">=3.11"
+dependencies = [
+    "google-genai>=1.47.0",
+    "websockets>=13.0",
+    "PyAudio>=0.2.14",
+    "numpy>=1.26",
+    "local-wake>=0.1.2",
+    "opencv-python>=4.10",
+    "pydantic>=2.9",
+    "python-dotenv>=1.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0",
+    "pytest-asyncio>=0.24",
+]

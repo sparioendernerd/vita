@@ -1,0 +1,271 @@
+#!/usr/bin/env node
+/**
+ * vita-cli — Gateway management CLI
+ *
+ * Usage:
+ *   npx tsx src/cli.ts pairing list          — list pending pairing requests
+ *   npx tsx src/cli.ts pairing approve <code> [name]  — approve a pairing code
+ *   npx tsx src/cli.ts pairing nodes         — list paired nodes
+ *   npx tsx src/cli.ts pairing unpair <id>   — remove a paired node
+ *   npx tsx src/cli.ts token                 — show the gateway token
+ *   npx tsx src/cli.ts token reset           — regenerate the gateway token
+ *   npx tsx src/cli.ts doctor                — security audit
+ *   npx tsx src/cli.ts config                — show current config
+ */
+
+import { resolve, dirname } from "node:path";
+import { fileURLToPath } from "node:url";
+import { readFileSync, existsSync, writeFileSync } from "node:fs";
+import dotenv from "dotenv";
+
+const __dirname = dirname(fileURLToPath(import.meta.url));
+dotenv.config({ path: resolve(__dirname, "../../.env") });
+
+import {
+  loadOrCreateToken,
+  generateToken,
+  listPairedNodes,
+  listPendingPairings,
+  approvePairing,
+  unpairNode,
+} from "./auth/token-manager.js";
+import {
+  loadGatewayConfig,
+  CONFIG_PATH,
+  TOKEN_PATH,
+  PAIRING_PATH,
+} from "./config/gateway-config.js";
+import { isTailscaleAvailable, getTailscaleIP, getTailscaleHostname } from "./network/tailscale.js";
+
+const args = process.argv.slice(2);
+const command = args[0];
+const subcommand = args[1];
+
+function printHelp() {
+  console.log(`
+🧠 VITA Gateway CLI
+
+Commands:
+  pairing list              List pending pairing requests
+  pairing approve <code> [name]  Approve a node pairing
+  pairing nodes             List all paired nodes
+  pairing unpair <nodeId>   Remove a paired node
+  token                     Show current gateway token
+  token reset               Generate a new gateway token
+  doctor                    Security audit of your gateway
+  config                    Show current gateway configuration
+  status                    Show gateway status
+`);
+}
+
+async function main() {
+  if (!command || command === "help" || command === "--help") {
+    printHelp();
+    return;
+  }
+
+  switch (command) {
+    case "pairing": {
+      if (!subcommand || subcommand === "list") {
+        const pending = listPendingPairings();
+        if (pending.length === 0) {
+          console.log("No pending pairing requests.");
+        } else {
+          console.log(`\n📋 Pending pairing requests (${pending.length}):\n`);
+          for (const p of pending) {
+            console.log(`  Code: ${p.code}  |  Node: ${p.nodeId.substring(0, 12)}...  |  Requested: ${p.requestedAt}`);
+            console.log(`  Capabilities: ${p.capabilities.join(", ")}\n`);
+          }
+        }
+      } else if (subcommand === "approve") {
+        const code = args[2];
+        const name = args[3];
+        if (!code) {
+          console.error("Usage: vita-cli pairing approve <code> [name]");
+          process.exit(1);
+        }
+        const result = approvePairing(code, name);
+        if (result) {
+          console.log(`✅ Node paired: ${result.name} (${result.nodeId.substring(0, 12)}...)`);
+        } else {
+          console.error(`❌ No pending pairing with code: ${code}`);
+          process.exit(1);
+        }
+      } else if (subcommand === "nodes") {
+        const nodes = listPairedNodes();
+        if (nodes.length === 0) {
+          console.log("No paired nodes.");
+        } else {
+          console.log(`\n🔗 Paired nodes (${nodes.length}):\n`);
+          for (const n of nodes) {
+            console.log(`  ${n.name}`);
+            console.log(`    ID: ${n.nodeId.substring(0, 16)}...`);
+            console.log(`    Paired: ${n.pairedAt}`);
+            console.log(`    Last seen: ${n.lastSeen || "never"}`);
+            console.log(`    Capabilities: ${n.capabilities.join(", ")}\n`);
+          }
+        }
+      } else if (subcommand === "unpair") {
+        const nodeId = args[2];
+        if (!nodeId) {
+          console.error("Usage: vita-cli pairing unpair <nodeId>");
+          process.exit(1);
+        }
+        if (unpairNode(nodeId)) {
+          console.log(`✅ Node unpaired: ${nodeId}`);
+        } else {
+          console.error(`❌ No paired node with ID: ${nodeId}`);
+        }
+      }
+      break;
+    }
+
+    case "token": {
+      if (subcommand === "reset") {
+        const newToken = generateToken();
+        writeFileSync(TOKEN_PATH, newToken, { mode: 0o600 });
+        console.log(`🔑 New token generated: ${newToken}`);
+        console.log(`   Saved to: ${TOKEN_PATH}`);
+        console.log("   ⚠ All connected nodes will need the new token.");
+      } else {
+        const token = loadOrCreateToken();
+        console.log(`🔑 Gateway token: ${token}`);
+        console.log(`   Stored at: ${TOKEN_PATH}`);
+      }
+      break;
+    }
+
+    case "doctor": {
+      console.log("\n🩺 VITA Gateway Security Audit\n");
+      const config = loadGatewayConfig();
+      let issues = 0;
+      let warnings = 0;
+
+      // Check auth mode
+      if (config.gateway.auth.mode === "none") {
+        console.log("  ❌ CRITICAL: Auth mode is 'none' — anyone can connect to the gateway");
+        issues++;
+      } else {
+        console.log(`  ✅ Auth mode: ${config.gateway.auth.mode}`);
+      }
+
+      // Check bind
+      if (config.gateway.bind === "lan") {
+        if (config.gateway.auth.mode === "none") {
+          console.log("  ❌ CRITICAL: Gateway bound to LAN (0.0.0.0) with no auth!");
+          issues++;
+        } else {
+          console.log("  ⚠ WARNING: Gateway bound to LAN (0.0.0.0) — ensure firewall is configured");
+          warnings++;
+        }
+      } else {
+        console.log(`  ✅ Bind: ${config.gateway.bind} (loopback = safe)`);
+      }
+
+      // Check exec
+      if (config.tools.exec.enabled) {
+        if (config.tools.exec.security === "full") {
+          console.log("  ⚠ WARNING: Command execution enabled with security='full' — any command can run");
+          warnings++;
+        } else {
+          console.log(`  ✅ Exec enabled with security: ${config.tools.exec.security}`);
+        }
+      } else {
+        console.log("  ✅ Exec disabled");
+      }
+
+      // Check Tailscale
+      if (config.gateway.tailscale.mode === "funnel") {
+        if (!config.gateway.auth.password) {
+          console.log("  ❌ CRITICAL: Tailscale Funnel enabled without password auth");
+          issues++;
+        } else {
+          console.log("  ✅ Tailscale Funnel with password auth");
+        }
+      } else {
+        console.log(`  ✅ Tailscale: ${config.gateway.tailscale.mode}`);
+      }
+
+      // Check token strength
+      if (config.gateway.auth.mode === "token") {
+        const token = existsSync(TOKEN_PATH) ? readFileSync(TOKEN_PATH, "utf-8").trim() : "";
+        if (token.length < 32) {
+          console.log("  ⚠ WARNING: Gateway token is too short (< 32 chars)");
+          warnings++;
+        } else {
+          console.log("  ✅ Token length OK");
+        }
+      }
+
+      // Check pairing
+      const nodes = listPairedNodes();
+      const pending = listPendingPairings();
+      console.log(`  ℹ Paired nodes: ${nodes.length}`);
+      if (pending.length > 0) {
+        console.log(`  ⚠ Pending pairing requests: ${pending.length}`);
+        warnings++;
+      }
+
+      // Check Tailscale availability
+      console.log("");
+      console.log("  🔍 Tailscale status:");
+      const tsAvailable = isTailscaleAvailable();
+      if (tsAvailable) {
+        console.log(`     ✅ Tailscale running (IP: ${getTailscaleIP()}, Host: ${getTailscaleHostname()})`);
+      } else {
+        console.log("     ℹ Tailscale not detected (install: curl -fsSL https://tailscale.com/install.sh | sh)");
+      }
+
+      // Config file permissions (Linux-specific)
+      console.log("");
+      if (issues === 0 && warnings === 0) {
+        console.log("  🎉 No issues found! Gateway is properly secured.\n");
+      } else {
+        console.log(`  Summary: ${issues} critical issue(s), ${warnings} warning(s)\n`);
+      }
+      break;
+    }
+
+    case "config": {
+      const config = loadGatewayConfig();
+      console.log(`\n📋 Gateway Configuration (${CONFIG_PATH}):\n`);
+      console.log(JSON.stringify(config, null, 2));
+      break;
+    }
+
+    case "status": {
+      const config = loadGatewayConfig();
+      console.log("\n🧠 VITA Gateway Status\n");
+      console.log(`  Config:     ${CONFIG_PATH}`);
+      console.log(`  Token:      ${TOKEN_PATH}`);
+      console.log(`  Pairings:   ${PAIRING_PATH}`);
+      console.log(`  Bind:       ${config.gateway.bind}`);
+      console.log(`  Port:       ${config.gateway.port}`);
+      console.log(`  Auth:       ${config.gateway.auth.mode}`);
+      console.log(`  Tailscale:  ${config.gateway.tailscale.mode}`);
+      console.log(`  Exec:       ${config.tools.exec.enabled ? config.tools.exec.security : "disabled"}`);
+
+      const nodes = listPairedNodes();
+      console.log(`  Paired:     ${nodes.length} node(s)`);
+
+      const tsAvail = isTailscaleAvailable();
+      console.log(`  Tailscale:  ${tsAvail ? "available" : "not installed"}`);
+      if (tsAvail) {
+        console.log(`    IP:       ${getTailscaleIP()}`);
+        console.log(`    Host:     ${getTailscaleHostname()}`);
+      }
+      console.log("");
+      break;
+    }
+
+    default:
+      console.error(`Unknown command: ${command}`);
+      printHelp();
+      process.exit(1);
+  }
+}
+
+main().catch((err) => {
+  console.error(`Error: ${err}`);
+  process.exit(1);
+});

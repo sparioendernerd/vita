@@ -1,0 +1,12 @@
+google-genai>=1.47.0
+websockets>=13.0
+PyAudio>=0.2.14
+numpy>=1.26
+local-wake>=0.1.2
+opencv-python>=4.10
+pydantic>=2.9
+python-dotenv>=1.0
+
+[dev]
+pytest>=8.0
+pytest-asyncio>=0.24
