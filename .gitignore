@@ -32,3 +32,6 @@ node/src/wakeword/refs/*.wav
 # Memory data (runtime generated)
 gateway/data/memory/**/*.json
 !gateway/data/memory/.gitkeep
+
+# other
+file_list.txt
