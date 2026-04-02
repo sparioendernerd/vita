@@ -40,7 +40,7 @@ class GatewayClient:
                 "token": self.gateway_token,
                 "nodeId": self.node_id,
                 "vitaName": self.vita_name,
-                "capabilities": ["audio"],
+                "capabilities": ["audio", "tools"],
             }))
 
             # Wait for auth:result
@@ -72,7 +72,7 @@ class GatewayClient:
             await self._send(create_message("node:register", {
                 "nodeId": self.node_id,
                 "vitaName": self.vita_name,
-                "capabilities": ["audio"],
+                "capabilities": ["audio", "tools"],
             }))
             logger.info(f"Registered as node {self.node_id} for VITA {self.vita_name} (legacy mode)")
 
@@ -128,6 +128,13 @@ class GatewayClient:
         await self._send(create_message("node:status", {
             "nodeId": self.node_id,
             "state": state,
+        }))
+
+    async def send_command_result(self, call_id: str, result: dict | None = None, error: str | None = None) -> None:
+        await self._send(create_message("node:command:result", {
+            "callId": call_id,
+            "result": result,
+            "error": error,
         }))
 
     async def _send(self, msg: dict) -> None:
@@ -213,4 +220,3 @@ class GatewayClient:
             return {}
 
         return await asyncio.wait_for(_read(), timeout)
-

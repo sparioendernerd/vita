@@ -22,6 +22,7 @@ from .live_session.session_manager import LiveSessionManager
 from .live_session.tool_handler import ToolHandler
 from .vision.camera import Camera
 from .vision.screen_capture import ScreenCapture
+from .tools.dispatcher import execute_local_tool
 
 logging.basicConfig(
     level=logging.INFO,
@@ -104,6 +105,7 @@ class VitaNode:
         """Main loop: connect to gateway, start components, wait for wake words."""
 
         # Connect to gateway
+        self.gateway.on_command(self._handle_gateway_command)
         await self.gateway.connect()
         await self.gateway.send_status("idle")
 
@@ -590,6 +592,32 @@ class VitaNode:
 
         self.mic.stop()
         await self.gateway.disconnect()
+
+    async def _handle_gateway_command(self, command: str, args: dict[str, Any]) -> None:
+        if command != "execute_tool":
+            logger.warning(f"Unhandled gateway command: {command}")
+            return
+
+        call_id = str(args.get("callId", ""))
+        tool_name = str(args.get("toolName", ""))
+        tool_args = args.get("toolArgs", {})
+
+        if not call_id or not tool_name or not isinstance(tool_args, dict):
+            await self.gateway.send_command_result(call_id or "unknown", error="Invalid execute_tool payload")
+            return
+
+        try:
+            result = await execute_local_tool(
+                tool_name,
+                tool_args,
+                on_enable_vision=self._enable_vision,
+                on_disable_vision=self._disable_vision,
+                on_enable_screenshare=self._enable_screenshare,
+            )
+            await self.gateway.send_command_result(call_id, result=result)
+        except Exception as e:
+            logger.error(f"Gateway command tool execution failed: {tool_name}: {e}")
+            await self.gateway.send_command_result(call_id, error=str(e))
 
 
 async def main():

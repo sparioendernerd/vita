@@ -11,6 +11,7 @@ export type MessageType =
   | "node:status"          // Node -> Gateway: state change
   | "node:list"            // Query connected nodes
   | "node:describe"        // Node capabilities + permissions
+  | "node:command:result"  // Node -> Gateway: result for a gateway-issued command
 
   // Session
   | "session:start"        // Node -> Gateway: request session config
@@ -59,7 +60,7 @@ export interface AuthHandshakePayload {
   password?: string;
   nodeId: string;
   vitaName: string;
-  capabilities: ("audio" | "vision" | "mobile")[];
+  capabilities: ("audio" | "vision" | "mobile" | "tools")[];
 }
 
 export interface AuthResultPayload {
@@ -75,12 +76,18 @@ export interface AuthResultPayload {
 export interface NodeRegisterPayload {
   nodeId: string;
   vitaName: string;
-  capabilities: ("audio" | "vision" | "mobile")[];
+  capabilities: ("audio" | "vision" | "mobile" | "tools")[];
 }
 
 export interface NodeStatusPayload {
   nodeId: string;
   state: "idle" | "listening" | "conversing" | "error";
+}
+
+export interface NodeCommandResultPayload {
+  callId: string;
+  result?: unknown;
+  error?: string;
 }
 
 export interface NodeListPayload {

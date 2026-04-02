@@ -70,9 +70,12 @@ export class MemoryStore {
     this.db.pragma("foreign_keys = ON");
     this.db.exec(SCHEMA_SQL);
 
-    if (apiKey) {
-      this.vector = new VectorStore(apiKey, vitaName);
-      logger.info(`[memory] Vector store initialized for ${vitaName}`);
+    const chromaUrl = process.env.CHROMA_URL?.trim();
+    if (apiKey && chromaUrl) {
+      this.vector = new VectorStore(apiKey, vitaName, chromaUrl);
+      logger.info(`[memory] Vector store initialized for ${vitaName} via ${chromaUrl}`);
+    } else {
+      logger.info(`[memory] Vector store disabled for ${vitaName} (set CHROMA_URL to enable semantic memory)`);
     }
   }
 

@@ -11,6 +11,7 @@ VITA is a modular, personality-driven assistant with a split Gateway/Node archit
 
 - Real-time voice interaction via Gemini Live.
 - SQLite + vector-backed memory.
+- SQLite memory works by default; Chroma semantic memory is optional via `CHROMA_URL`.
 - Gateway-side `system_run` and `system_notify`.
 - Discord text messaging in both directions.
 - Tailscale-ready remote access.
@@ -54,6 +55,10 @@ Example:
 ```
 
 DMs to the bot are routed to the first loaded VITA automatically. Outbound `discord_notify` will prefer `DISCORD_DM_USER_ID`, and if that is not set it will fall back to the last user who DM'd that VITA.
+
+## Optional Chroma
+
+If you want semantic/vector memory, set `CHROMA_URL` in `.env` to a running Chroma server such as `http://localhost:8000`. If `CHROMA_URL` is unset, VITA will use SQLite memory only and will not attempt Chroma connections.
 
 ---
 

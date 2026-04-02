@@ -19,7 +19,7 @@ export interface NodeConnection {
   id: string;
   ws: WebSocket;
   vitaName: string;
-  capabilities: ("audio" | "vision" | "mobile")[];
+  capabilities: ("audio" | "vision" | "mobile" | "tools")[];
   lastHeartbeat: number;
   state: "idle" | "listening" | "conversing" | "error";
   authenticated: boolean;
@@ -33,6 +33,7 @@ export class GatewayServer {
   private handlers: MessageHandlers;
   private config: GatewayConfig;
   private gatewayToken?: string;
+  private pendingNodeCommands = new Map<string, { resolve: (value: unknown) => void; reject: (reason?: unknown) => void; timeout: NodeJS.Timeout }>();
 
   constructor(
     port: number,
@@ -321,8 +322,63 @@ export class GatewayServer {
     return Array.from(this.nodes.values());
   }
 
+  getConnectedNodesForVita(vitaName: string): NodeConnection[] {
+    return this.getConnectedNodes().filter((node) => node.vitaName === vitaName);
+  }
+
+  async executeToolOnNode(
+    nodeId: string,
+    toolName: string,
+    args: Record<string, unknown>,
+    timeoutMs = 30000
+  ): Promise<unknown> {
+    const node = this.nodes.get(nodeId);
+    if (!node || node.ws.readyState !== WebSocket.OPEN) {
+      throw new Error(`Node ${nodeId} is not online.`);
+    }
+
+    const callId = uuid();
+    const promise = new Promise<unknown>((resolve, reject) => {
+      const timeout = setTimeout(() => {
+        this.pendingNodeCommands.delete(callId);
+        reject(new Error(`Node tool '${toolName}' timed out after ${timeoutMs}ms.`));
+      }, timeoutMs);
+      this.pendingNodeCommands.set(callId, { resolve, reject, timeout });
+    });
+
+    this.sendToNode(nodeId, createMessage("gateway:command", {
+      command: "execute_tool",
+      args: {
+        callId,
+        toolName,
+        toolArgs: args,
+      },
+    }));
+
+    return promise;
+  }
+
+  resolveNodeCommand(callId: string, result?: unknown, error?: string): void {
+    const pending = this.pendingNodeCommands.get(callId);
+    if (!pending) {
+      return;
+    }
+    clearTimeout(pending.timeout);
+    this.pendingNodeCommands.delete(callId);
+    if (error) {
+      pending.reject(new Error(error));
+    } else {
+      pending.resolve(result ?? {});
+    }
+  }
+
   close(): void {
     logger.info("Closing Gateway...");
+    for (const pending of this.pendingNodeCommands.values()) {
+      clearTimeout(pending.timeout);
+      pending.reject(new Error("Gateway is shutting down."));
+    }
+    this.pendingNodeCommands.clear();
     this.wss.close();
     this.httpServer.close();
   }

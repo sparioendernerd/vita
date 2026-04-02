@@ -106,6 +106,7 @@ async function main() {
 
   // ── Start Gateway Server ────────────────────────────────────────────────
   const server = new GatewayServer(port, host, vitaRegistry, geminiApiKey, config, gatewayToken, discordBridge);
+  discordBridge?.attachGateway(server, config);
 
   // Heartbeat ping every 30 seconds
   setInterval(() => {

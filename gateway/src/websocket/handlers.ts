@@ -8,6 +8,7 @@ import {
   type ToolRequestPayload,
   type TranscriptEntryPayload,
   type NodeStatusPayload,
+  type NodeCommandResultPayload,
   type SystemRunPayload,
   type SystemNotifyPayload,
   type SessionTranscriptPayload,
@@ -287,6 +288,11 @@ export function createHandlers(
     },
 
     // ── Node list (query from any connected node) ────────────────────────
+
+    "node:command:result": (_node, msg) => {
+      const payload = msg.payload as NodeCommandResultPayload;
+      server.resolveNodeCommand(payload.callId, payload.result, payload.error);
+    },
 
     "node:list": (node, _msg) => {
       const nodes = server.getConnectedNodes().map((n) => ({

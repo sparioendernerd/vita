@@ -44,8 +44,8 @@ export class VectorStore {
   private embeddingFunction: GeminiEmbeddingFunction;
   private collectionName: string;
 
-  constructor(apiKey: string, vitaName: string) {
-    this.client = new ChromaClient();
+  constructor(apiKey: string, vitaName: string, chromaUrl: string) {
+    this.client = new ChromaClient({ path: chromaUrl });
     this.embeddingFunction = new GeminiEmbeddingFunction(apiKey);
     // Chroma collections must be 3-63 chars, alphanumeric/underscore/hyphen
     this.collectionName = `vita_memories_${vitaName.toLowerCase().replace(/[^a-z0-9_-]/g, "_")}`;
