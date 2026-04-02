@@ -86,6 +86,8 @@ DMs to the bot are routed to the first loaded VITA automatically. Outbound `disc
 
 Custom gateway scripts live in the top-level `scripts/` folder. Each script gets its own folder with a `script.json` manifest plus whatever files it needs. Graves can inspect them with `list_scripts` and run them with `run_script`.
 
+For new script creation over Discord, Graves also has `create_script_with_codex`. That starts Codex in the background, lets him reply immediately with the build plan, and sends a follow-up Discord message when the job finishes.
+
 See [docs/scripts-system.md](docs/scripts-system.md) for the folder format and the included Codex-powered scaffolding example.
 
 ## Optional Chroma

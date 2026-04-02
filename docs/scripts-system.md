@@ -47,6 +47,7 @@ Each `script.json` uses this shape:
 
 - `list_scripts`: returns the registered scripts and their argument definitions.
 - `run_script`: runs one script by `name` with optional named `args`.
+- `create_script_with_codex`: Discord-first background builder for new scripts. It starts Codex, returns immediately, and sends a Discord follow-up when the build completes.
 
 Example:
 
@@ -69,6 +70,8 @@ The local `scripts/codex_script_starter/` example uses Codex CLI to generate a n
 Suggested flow:
 
 1. Ask Graves to run `list_scripts`.
-2. Ask him to run `codex_script_starter` with a script name and a build prompt.
+2. Over Discord, ask Graves to build a script. He should clarify requirements if needed, then use `create_script_with_codex` once the ask is clear.
 3. Review the generated folder in `scripts/<name>/`.
 4. Ask Graves to run the new script with `run_script`.
+
+The synchronous `codex_script_starter` example still exists for manual use, but Graves should prefer the background tool for normal Discord conversations so he can respond immediately instead of timing out like a tragic Victorian patient.

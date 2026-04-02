@@ -22,6 +22,7 @@
     "system_run",
     "list_scripts",
     "run_script",
+    "create_script_with_codex",
     "system_notify",
     "discord_notify",
     "discord_send_file",
