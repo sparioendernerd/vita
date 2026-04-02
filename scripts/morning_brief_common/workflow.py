@@ -632,7 +632,11 @@ def _play_song_via_browser(config: MorningBriefConfig, selected_track: dict[str,
     duration = int(selected_track.get("duration_seconds") or 0)
     time.sleep(startup_delay)
     play_command = _start_browser_playback(config, url)
-    wait_seconds = max(15, duration) + max(0, int(config.playback_buffer_seconds))
+    manual_play_triggered = _manual_play_triggered(config, play_command, url)
+    if duration > 0 and not manual_play_triggered:
+        wait_seconds = max(5, duration - startup_delay)
+    else:
+        wait_seconds = max(15, duration)
     time.sleep(wait_seconds)
     close_result = _close_browser_playback(config, process, url, selected_track)
     return {
@@ -641,6 +645,8 @@ def _play_song_via_browser(config: MorningBriefConfig, selected_track: dict[str,
         "play_command": play_command,
         "close_result": close_result,
         "pid": process.pid,
+        "manual_play_triggered": manual_play_triggered,
+        "startup_delay_seconds": startup_delay,
         "wait_seconds": wait_seconds,
     }
 
@@ -761,6 +767,18 @@ def _start_browser_playback(config: MorningBriefConfig, url: str) -> str | None:
             return "playerctl play"
 
     return None
+
+
+def _manual_play_triggered(config: MorningBriefConfig, play_command: str | None, url: str) -> bool:
+    if not play_command:
+        return False
+    if play_command == "playerctl status":
+        return False
+    if config.browser_play_command:
+        expected = config.browser_play_command.replace("{{url}}", url)
+        if play_command == expected:
+            return True
+    return play_command == "playerctl play"
 
 
 def _close_browser_playback(
