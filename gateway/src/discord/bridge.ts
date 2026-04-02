@@ -405,6 +405,12 @@ export class DiscordBridge {
       " If no node is online, clearly say you cannot do it because the node is offline instead of pretending."
     );
     parts.push(
+      "After you receive tool results, answer the user directly. Do not call the same tool repeatedly with the same arguments unless something materially changed."
+    );
+    parts.push(
+      "Do not use memory tools for routine chat. Only read, search, write, or consolidate memory when it is genuinely necessary to answer the request or preserve something worth remembering."
+    );
+    parts.push(
       "For Discord replies, send plain messages. Do not mention function calls, internal errors, or protocol details unless a failure genuinely matters to Mr Vailen."
     );
     parts.push(
@@ -482,24 +488,42 @@ export class DiscordBridge {
     });
 
     let response = await chat.sendMessage({ message: userText });
+    const seenCallSignatures = new Map<string, number>();
+    let lastToolError: string | undefined;
 
     for (let i = 0; i < 8; i += 1) {
       const functionCalls = response.functionCalls;
       if (!functionCalls?.length) {
         const text = (response.text ?? "").trim();
-        return text || "Silence. Inspiring. Try that again.";
+        return text || lastToolError || "Silence. Inspiring. Try that again.";
+      }
+
+      const signature = JSON.stringify(
+        functionCalls.map((call) => ({
+          name: call.name ?? "unknown_tool",
+          args: call.args ?? {},
+        }))
+      );
+      const signatureCount = (seenCallSignatures.get(signature) ?? 0) + 1;
+      seenCallSignatures.set(signature, signatureCount);
+      if (signatureCount >= 3) {
+        logger.warn(`[discord] Repeated tool loop detected for ${vita.name}: ${signature}`);
+        return lastToolError || "I keep hitting the same tool problem. Try that again in a moment.";
       }
 
       const functionResponses = [];
       for (const call of functionCalls) {
         const callName = call.name ?? "unknown_tool";
         const result = await this.executeTool(vita, callName, (call.args ?? {}) as Record<string, unknown>, user, channelId);
+        if (typeof result.error === "string" && result.error.trim()) {
+          lastToolError = result.error;
+        }
         functionResponses.push(createPartFromFunctionResponse(call.id ?? `${Date.now()}-${callName}`, callName, result));
       }
       response = await chat.sendMessage({ message: functionResponses });
     }
 
-    return "This is becoming elaborate even by our standards. Try that again in a moment.";
+    return lastToolError || "This is becoming elaborate even by our standards. Try that again in a moment.";
   }
 
   private getToolDeclarations(vita: VitaConfig): Array<Record<string, unknown>> {
