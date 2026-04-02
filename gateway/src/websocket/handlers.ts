@@ -158,6 +158,15 @@ export function createHandlers(
                 body: payload.args.body as string,
               });
             }
+          } else if (payload.toolName === "discord_send_file") {
+            if (!discordBridge) {
+              result = { success: false, error: "Discord bridge is not enabled on the gateway." };
+            } else {
+              result = await discordBridge.sendFileToVita(node.vitaName, {
+                filePath: payload.args.file_path as string,
+                caption: payload.args.caption as string | undefined,
+              });
+            }
           } else if (payload.toolName === "system_list_nodes") {
             const nodes = server.getConnectedNodes().map((n) => ({
               id: n.id,

@@ -1,4 +1,5 @@
 import {
+  AttachmentBuilder,
   ChannelType,
   Client,
   GatewayIntentBits,
@@ -6,9 +7,9 @@ import {
   Partials,
   type User,
 } from "discord.js";
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, readFileSync, statSync } from "node:fs";
 import { homedir } from "node:os";
-import { join } from "node:path";
+import { basename, join } from "node:path";
 import type { VitaRegistry, VitaConfig } from "../config/vita-registry.js";
 import { getMemoryStore } from "../memory/index.js";
 import { appendTranscript, createSessionId } from "../knowledge/transcript-logger.js";
@@ -33,6 +34,11 @@ interface DiscordReplyResult {
   vitaName: string;
   reply: string;
   sessionId: string;
+}
+
+interface DiscordFilePayload {
+  filePath: string;
+  caption?: string;
 }
 
 interface TranscriptTurn {
@@ -174,6 +180,74 @@ export class DiscordBridge {
     return { success: true, sent };
   }
 
+  async sendFileToVita(
+    vitaName: string,
+    payload: DiscordFilePayload,
+    options?: { channelId?: string }
+  ): Promise<{ success: boolean; sent: number; error?: string; filename?: string }> {
+    const vita = this.vitaRegistry.get(vitaName);
+    if (!vita) {
+      return { success: false, sent: 0, error: `Unknown VITA: ${vitaName}` };
+    }
+
+    const filePath = payload.filePath.trim();
+    if (!filePath || !existsSync(filePath)) {
+      return { success: false, sent: 0, error: `File not found: ${filePath}` };
+    }
+
+    const stat = statSync(filePath);
+    if (!stat.isFile()) {
+      return { success: false, sent: 0, error: `Path is not a file: ${filePath}` };
+    }
+
+    const maxBytes = 25 * 1024 * 1024;
+    if (stat.size > maxBytes) {
+      return { success: false, sent: 0, error: `File is too large for Discord upload (${stat.size} bytes).` };
+    }
+
+    const attachment = new AttachmentBuilder(filePath);
+    const messagePayload = {
+      content: payload.caption?.trim() || undefined,
+      files: [attachment],
+    };
+
+    let sent = 0;
+
+    if (options?.channelId) {
+      const channel = await this.fetchChannel(options.channelId);
+      if (!channel || !this.canSend(channel)) {
+        return { success: false, sent: 0, error: `Channel ${options.channelId} is not sendable.` };
+      }
+      await channel.send(messagePayload);
+    return { success: true, sent: 1, filename: basename(filePath) };
+    }
+
+    const dmTargetUserId = this.getDmTargetUserId(vita);
+    if (dmTargetUserId) {
+      const user = await this.fetchUser(dmTargetUserId);
+      if (user) {
+        const dmChannel = await user.createDM();
+        await dmChannel.send(messagePayload);
+        sent += 1;
+      }
+    }
+
+    for (const channelId of vita.discordChannels) {
+      const channel = await this.fetchChannel(channelId);
+      if (!channel || !this.canSend(channel)) {
+        continue;
+      }
+      await channel.send(messagePayload);
+      sent += 1;
+    }
+
+    if (!sent) {
+      return { success: false, sent: 0, error: "No Discord DM target or configured channels were reachable." };
+    }
+
+    return { success: true, sent, filename: basename(filePath) };
+  }
+
   private async handleMessage(message: Message): Promise<void> {
     if (message.author.bot) {
       return;
@@ -285,7 +359,7 @@ export class DiscordBridge {
       0.45
     );
 
-    const reply = await this.runToolAwareChat(vita, message.author, userText, memories, history);
+    const reply = await this.runToolAwareChat(vita, message.author, userText, memories, history, message.channelId);
 
     appendTranscript(vita.name, sessionId, {
       timestamp: new Date().toISOString(),
@@ -385,7 +459,8 @@ export class DiscordBridge {
     user: User,
     userText: string,
     memories: string[],
-    history: TranscriptTurn[]
+    history: TranscriptTurn[],
+    channelId?: string
   ): Promise<string> {
     const chat = this.genai.chats.create({
       model: vita.textModel,
@@ -411,7 +486,7 @@ export class DiscordBridge {
       const functionResponses = [];
       for (const call of functionCalls) {
         const callName = call.name ?? "unknown_tool";
-        const result = await this.executeTool(vita, callName, (call.args ?? {}) as Record<string, unknown>, user);
+        const result = await this.executeTool(vita, callName, (call.args ?? {}) as Record<string, unknown>, user, channelId);
         functionResponses.push(createPartFromFunctionResponse(call.id ?? `${Date.now()}-${callName}`, callName, result));
       }
       response = await chat.sendMessage({ message: functionResponses });
@@ -513,6 +588,18 @@ export class DiscordBridge {
           required: ["title", "body"],
         },
       },
+      discord_send_file: {
+        name: "discord_send_file",
+        description: "Send a file or image from the gateway machine to Discord as an attachment.",
+        parametersJsonSchema: {
+          type: "object",
+          properties: {
+            file_path: { type: "string" },
+            caption: { type: "string" },
+          },
+          required: ["file_path"],
+        },
+      },
       system_list_nodes: {
         name: "system_list_nodes",
         description: "List connected VITA nodes and whether they are online.",
@@ -597,7 +684,8 @@ export class DiscordBridge {
     vita: VitaConfig,
     toolName: string,
     args: Record<string, unknown>,
-    user: User
+    user: User,
+    channelId?: string
   ): Promise<Record<string, unknown>> {
     const store = getMemoryStore(vita.name, this.geminiApiKey);
 
@@ -686,6 +774,17 @@ export class DiscordBridge {
         }
       }
 
+      if (toolName === "discord_send_file") {
+        return await this.sendFileToVita(
+          vita.name,
+          {
+            filePath: String(args.file_path ?? ""),
+            caption: typeof args.caption === "string" ? args.caption : undefined,
+          },
+          channelId ? { channelId } : undefined
+        );
+      }
+
       if (toolName === "system_list_nodes") {
         return {
           nodes: this.gatewayServer?.getConnectedNodes().map((node) => ({
@@ -752,7 +851,7 @@ export class DiscordBridge {
 
   private canSend(
     channel: Message["channel"]
-  ): channel is Message["channel"] & { send: (content: string) => Promise<unknown>; sendTyping: () => Promise<unknown> } {
+  ): channel is Message["channel"] & { send: (content: unknown) => Promise<unknown>; sendTyping: () => Promise<unknown> } {
     return typeof (channel as { send?: unknown }).send === "function";
   }
 

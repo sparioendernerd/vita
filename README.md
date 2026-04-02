@@ -14,6 +14,7 @@ VITA is a modular, personality-driven assistant with a split Gateway/Node archit
 - SQLite memory works by default; Chroma semantic memory is optional via `CHROMA_URL`.
 - Gateway-side `system_run` and `system_notify`.
 - Discord text messaging in both directions.
+- Discord file/image attachments from the gateway machine via `discord_send_file`.
 - Tailscale-ready remote access.
 
 ## Getting Started

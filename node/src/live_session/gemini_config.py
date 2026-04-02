@@ -204,6 +204,24 @@ def build_tool_declarations(vita_config: dict) -> list[dict[str, Any]]:
                 "required": ["title", "body"],
             },
         },
+        "discord_send_file": {
+            "name": "discord_send_file",
+            "description": "Send a file or image from your gateway machine to Discord as an attachment.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "file_path": {
+                        "type": "string",
+                        "description": "Absolute path to the file on the gateway machine.",
+                    },
+                    "caption": {
+                        "type": "string",
+                        "description": "Optional caption to include with the attachment.",
+                    },
+                },
+                "required": ["file_path"],
+            },
+        },
         "system_list_nodes": {
             "name": "system_list_nodes",
             "description": "List all connected VITA nodes. Use this to see what devices are active in your network.",

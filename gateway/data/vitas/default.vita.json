@@ -22,6 +22,7 @@
     "system_run",
     "system_notify",
     "discord_notify",
+    "discord_send_file",
     "system_list_nodes",
     "enable_vision",
     "enable_screenshare",
