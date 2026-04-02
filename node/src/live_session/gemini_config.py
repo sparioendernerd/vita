@@ -186,6 +186,24 @@ def build_tool_declarations(vita_config: dict) -> list[dict[str, Any]]:
                 "required": ["title", "body"],
             },
         },
+        "discord_notify": {
+            "name": "discord_notify",
+            "description": "Send a Discord message to Mr Vailen through your configured Discord channel when you need to proactively get his attention.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "title": {
+                        "type": "string",
+                        "description": "Short title for the Discord message.",
+                    },
+                    "body": {
+                        "type": "string",
+                        "description": "Main Discord message body.",
+                    },
+                },
+                "required": ["title", "body"],
+            },
+        },
         "system_list_nodes": {
             "name": "system_list_nodes",
             "description": "List all connected VITA nodes. Use this to see what devices are active in your network.",

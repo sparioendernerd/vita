@@ -21,6 +21,7 @@ import { sendSystemNotify } from "../tools/system-notify.js";
 import { appendTranscript } from "../knowledge/transcript-logger.js";
 import { ingestContent } from "../knowledge/ingest.js";
 import type { GatewayConfig } from "../config/gateway-config.js";
+import type { DiscordBridge } from "../discord/bridge.js";
 
 export type MessageHandler = (node: NodeConnection, msg: ProtocolMessage) => void;
 export type MessageHandlers = Record<string, MessageHandler>;
@@ -32,7 +33,8 @@ export function createHandlers(
   vitaRegistry: VitaRegistry,
   server: GatewayServer,
   geminiApiKey: string,
-  config?: GatewayConfig
+  config?: GatewayConfig,
+  discordBridge?: DiscordBridge
 ): MessageHandlers {
   return {
     // ── Session ──────────────────────────────────────────────────────────
@@ -146,6 +148,15 @@ export function createHandlers(
               body: payload.args.body as string,
               urgency: payload.args.urgency as "low" | "normal" | "critical" | undefined,
             });
+          } else if (payload.toolName === "discord_notify") {
+            if (!discordBridge) {
+              result = { success: false, error: "Discord bridge is not enabled on the gateway." };
+            } else {
+              result = await discordBridge.notifyVita(node.vitaName, {
+                title: payload.args.title as string,
+                body: payload.args.body as string,
+              });
+            }
           } else if (payload.toolName === "system_list_nodes") {
             const nodes = server.getConnectedNodes().map((n) => ({
               id: n.id,

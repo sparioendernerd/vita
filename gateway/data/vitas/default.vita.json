@@ -21,6 +21,7 @@
     "google_search",
     "system_run",
     "system_notify",
+    "discord_notify",
     "system_list_nodes",
     "enable_vision",
     "enable_screenshare",

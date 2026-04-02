@@ -13,6 +13,7 @@ import type { VitaRegistry } from "../config/vita-registry.js";
 import type { GatewayConfig } from "../config/gateway-config.js";
 import { authenticateUpgrade, authenticateHandshake, type AuthContext } from "../auth/middleware.js";
 import { isNodePaired, createPairingCode, touchPairedNode } from "../auth/token-manager.js";
+import type { DiscordBridge } from "../discord/bridge.js";
 
 export interface NodeConnection {
   id: string;
@@ -39,11 +40,12 @@ export class GatewayServer {
     vitaRegistry: VitaRegistry,
     geminiApiKey: string,
     config: GatewayConfig,
-    gatewayToken?: string
+    gatewayToken?: string,
+    discordBridge?: DiscordBridge
   ) {
     this.config = config;
     this.gatewayToken = gatewayToken;
-    this.handlers = createHandlers(vitaRegistry, this, geminiApiKey, config);
+    this.handlers = createHandlers(vitaRegistry, this, geminiApiKey, config, discordBridge);
 
     // Create HTTP server for future Control UI + WS upgrade
     this.httpServer = createServer((req, res) => {

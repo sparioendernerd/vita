@@ -13,6 +13,7 @@ import { loadOrCreateToken } from "./auth/token-manager.js";
 import { setupTailscale, teardownTailscale } from "./network/tailscale.js";
 import { existsSync } from "node:fs";
 import { logger } from "./logger.js";
+import { DiscordBridge } from "./discord/bridge.js";
 
 // ── Environment Setup ────────────────────────────────────────────────────────
 // Try loading .env from root, then from current directory
@@ -88,8 +89,22 @@ async function main() {
   vitaRegistry.load();
   vitaRegistry.watchForChanges();
 
+  let discordBridge: DiscordBridge | undefined;
+  if (process.env.DISCORD_TOKEN) {
+    discordBridge = new DiscordBridge({
+      token: process.env.DISCORD_TOKEN,
+      applicationId: process.env.DISCORD_APPLICATION_ID,
+      geminiApiKey,
+      vitaRegistry,
+    });
+    await discordBridge.start();
+    logger.info("Discord bridge enabled");
+  } else {
+    logger.info("Discord bridge disabled (no DISCORD_TOKEN set)");
+  }
+
   // ── Start Gateway Server ────────────────────────────────────────────────
-  const server = new GatewayServer(port, host, vitaRegistry, geminiApiKey, config, gatewayToken);
+  const server = new GatewayServer(port, host, vitaRegistry, geminiApiKey, config, gatewayToken, discordBridge);
 
   // Heartbeat ping every 30 seconds
   setInterval(() => {
@@ -114,6 +129,7 @@ async function main() {
   const shutdown = () => {
     logger.info("Shutting down...");
     teardownTailscale(config.gateway.tailscale);
+    void discordBridge?.stop();
     server.close();
     process.exit(0);
   };
