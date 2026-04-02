@@ -1,0 +1,31 @@
+{
+  "vita_name": "graves",
+  "playlist_url": "https://music.youtube.com/playlist?list=PLj8WZi59XBNpwn4a4VsPX6Q9Q-4P_i9ml&si=b56ezzSAuqY-Mlu0",
+  "playlist_id": "PLj8WZi59XBNpwn4a4VsPX6Q9Q-4P_i9ml",
+  "vault_path_gateway": "~/vault",
+  "vault_path_windows_mirror": "C:\\Users\\spari\\Documents\\Vailen Industries Vault",
+  "weather": {
+    "label": "",
+    "latitude": null,
+    "longitude": null
+  },
+  "timezone": "America/New_York",
+  "interest_profile": [
+    "AI",
+    "developer tools",
+    "games"
+  ],
+  "song_history_cooldown_days": 7,
+  "news_repeat_lookback_days": 14,
+  "news_feed_urls": [
+    "https://news.google.com/rss/search?q=AI+assistants+OR+developer+tools+when:2d&hl=en-US&gl=US&ceid=US:en",
+    "https://news.google.com/rss/search?q=programming+OR+coding+tools+OR+software+engineering+when:2d&hl=en-US&gl=US&ceid=US:en",
+    "https://news.google.com/rss/search?q=gaming+OR+Steam+OR+indie+games+when:2d&hl=en-US&gl=US&ceid=US:en"
+  ],
+  "browser_open_command": "xdg-open \"{{url}}\"",
+  "browser_start_delay_seconds": 8,
+  "playback_buffer_seconds": 2,
+  "audio_player_command": "",
+  "tts_model": "gemini-2.5-flash-preview-tts",
+  "tts_voice_name": "Algieba"
+}

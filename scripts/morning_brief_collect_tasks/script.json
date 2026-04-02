@@ -1,0 +1,22 @@
+{
+  "name": "morning_brief_collect_tasks",
+  "description": "Collect Morning Brief task context from the Obsidian vault and recent Graves memory.",
+  "command": [
+    "python",
+    "main.py",
+    "--date",
+    "{{date}}"
+  ],
+  "cwd": ".",
+  "timeoutMs": 120000,
+  "enabled": true,
+  "args": [
+    {
+      "name": "date",
+      "description": "Optional local date key in YYYY-MM-DD format.",
+      "required": false,
+      "default": ""
+    }
+  ]
+}
+

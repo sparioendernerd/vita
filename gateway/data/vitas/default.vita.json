@@ -43,5 +43,72 @@
     "launch_steam_game"
   ],
   "discordChannels": [],
-  "scheduledTasks": []
+  "scheduledTasks": [
+    {
+      "id": "morning-brief-collect-tasks",
+      "cron": "30 1 * * *",
+      "description": "Collect Morning Brief task context from the Obsidian vault and recent memory.",
+      "action": "Run the `morning_brief_collect_tasks` script for the current local date. Do not perform any other work. Return a terse status summary.",
+      "timezone": "America/New_York",
+      "enabled": true,
+      "tools": [
+        "run_script"
+      ]
+    },
+    {
+      "id": "morning-brief-research-news",
+      "cron": "0 2 * * *",
+      "description": "Research and rank Morning Brief news without repeating recent stories.",
+      "action": "Run the `morning_brief_research_news` script for the current local date. Do not perform any other work. Return a terse status summary.",
+      "timezone": "America/New_York",
+      "enabled": true,
+      "tools": [
+        "run_script"
+      ]
+    },
+    {
+      "id": "morning-brief-collect-weather",
+      "cron": "30 2 * * *",
+      "description": "Fetch the White Plains weather snapshot for the Morning Brief.",
+      "action": "Run the `morning_brief_collect_weather` script for the current local date. Do not perform any other work. Return a terse status summary.",
+      "timezone": "America/New_York",
+      "enabled": true,
+      "tools": [
+        "run_script"
+      ]
+    },
+    {
+      "id": "morning-brief-select-song",
+      "cron": "0 3 * * *",
+      "description": "Choose the Morning Brief wake-up song from the configured playlist.",
+      "action": "Run the `morning_brief_select_song` script for the current local date. Do not perform any other work. Return a terse status summary.",
+      "timezone": "America/New_York",
+      "enabled": true,
+      "tools": [
+        "run_script"
+      ]
+    },
+    {
+      "id": "morning-brief-build-script",
+      "cron": "20 6 * * *",
+      "description": "Assemble the final Graves Morning Brief narration.",
+      "action": "Run the `morning_brief_build_script` script for the current local date. Do not perform any other work. Return a terse status summary.",
+      "timezone": "America/New_York",
+      "enabled": true,
+      "tools": [
+        "run_script"
+      ]
+    },
+    {
+      "id": "morning-brief-deliver",
+      "cron": "30 6 * * *",
+      "description": "Play the selected song and deliver the spoken Morning Brief through the gateway speakers.",
+      "action": "Run the `morning_brief_deliver` script for the current local date. Do not perform any other work. Return a terse status summary.",
+      "timezone": "America/New_York",
+      "enabled": true,
+      "tools": [
+        "run_script"
+      ]
+    }
+  ]
 }

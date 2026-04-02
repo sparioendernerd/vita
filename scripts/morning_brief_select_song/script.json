@@ -1,0 +1,22 @@
+{
+  "name": "morning_brief_select_song",
+  "description": "Choose a contextual Morning Brief wake-up song from the configured playlist.",
+  "command": [
+    "python",
+    "main.py",
+    "--date",
+    "{{date}}"
+  ],
+  "cwd": ".",
+  "timeoutMs": 180000,
+  "enabled": true,
+  "args": [
+    {
+      "name": "date",
+      "description": "Optional local date key in YYYY-MM-DD format.",
+      "required": false,
+      "default": ""
+    }
+  ]
+}
+

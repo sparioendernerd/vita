@@ -1,0 +1,42 @@
+{
+  "name": "morning_brief_deliver",
+  "description": "Play the selected song and deliver the spoken Morning Brief through the gateway speakers.",
+  "command": [
+    "python",
+    "main.py",
+    "--date",
+    "{{date}}",
+    "{{dry_run_flag}}",
+    "{{skip_playback_flag}}",
+    "{{skip_tts_flag}}"
+  ],
+  "cwd": ".",
+  "timeoutMs": 900000,
+  "enabled": true,
+  "args": [
+    {
+      "name": "date",
+      "description": "Optional local date key in YYYY-MM-DD format.",
+      "required": false,
+      "default": ""
+    },
+    {
+      "name": "dry_run_flag",
+      "description": "Pass --dry-run to simulate delivery.",
+      "required": false,
+      "default": ""
+    },
+    {
+      "name": "skip_playback_flag",
+      "description": "Pass --skip-playback to skip the song.",
+      "required": false,
+      "default": ""
+    },
+    {
+      "name": "skip_tts_flag",
+      "description": "Pass --skip-tts to skip spoken output.",
+      "required": false,
+      "default": ""
+    }
+  ]
+}

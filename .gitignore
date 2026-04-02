@@ -35,4 +35,32 @@ gateway/data/memory/**/*.json
 
 # other
 file_list.txt
-scripts/
+scripts/*
+!scripts/morning_brief_build_script/
+!scripts/morning_brief_build_script/main.py
+!scripts/morning_brief_build_script/script.json
+!scripts/morning_brief_collect_tasks/
+!scripts/morning_brief_collect_tasks/main.py
+!scripts/morning_brief_collect_tasks/script.json
+!scripts/morning_brief_collect_weather/
+!scripts/morning_brief_collect_weather/main.py
+!scripts/morning_brief_collect_weather/script.json
+!scripts/morning_brief_common/
+!scripts/morning_brief_common/__init__.py
+!scripts/morning_brief_common/cli.py
+!scripts/morning_brief_common/config.json
+!scripts/morning_brief_common/config.py
+!scripts/morning_brief_common/gemini.py
+!scripts/morning_brief_common/utils.py
+!scripts/morning_brief_common/vault.py
+!scripts/morning_brief_common/workflow.py
+!scripts/morning_brief_deliver/
+!scripts/morning_brief_deliver/main.py
+!scripts/morning_brief_deliver/script.json
+!scripts/morning_brief_research_news/
+!scripts/morning_brief_research_news/main.py
+!scripts/morning_brief_research_news/script.json
+!scripts/morning_brief_select_song/
+!scripts/morning_brief_select_song/main.py
+!scripts/morning_brief_select_song/script.json
+scripts/morning_brief_runtime/
