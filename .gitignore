@@ -64,3 +64,4 @@ scripts/*
 !scripts/morning_brief_select_song/main.py
 !scripts/morning_brief_select_song/script.json
 scripts/morning_brief_runtime/
+morning_brief_test.sh

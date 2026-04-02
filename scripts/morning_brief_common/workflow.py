@@ -623,18 +623,21 @@ def _fetch_playlist_tracks(playlist_id: str) -> list[dict[str, Any]]:
 
 
 def _play_song_via_browser(config: MorningBriefConfig, selected_track: dict[str, Any]) -> dict[str, Any]:
-    url = str(selected_track.get("watch_url") or "")
+    url = _with_autoplay(str(selected_track.get("watch_url") or ""))
     if not url:
         raise RuntimeError("Selected track did not include a watch URL.")
     command = config.browser_open_command.replace("{{url}}", url)
     process = subprocess.Popen(command, shell=True)
     startup_delay = max(0, int(config.browser_start_delay_seconds))
     duration = int(selected_track.get("duration_seconds") or 0)
-    wait_seconds = startup_delay + max(15, duration) + max(0, int(config.playback_buffer_seconds))
+    time.sleep(startup_delay)
+    play_command = _start_browser_playback(config, url)
+    wait_seconds = max(15, duration) + max(0, int(config.playback_buffer_seconds))
     time.sleep(wait_seconds)
     return {
         "status": "ok",
         "command": command,
+        "play_command": play_command,
         "pid": process.pid,
         "wait_seconds": wait_seconds,
     }
@@ -733,6 +736,32 @@ def _append_run_log(config: MorningBriefConfig, date_key: str, payload: dict[str
     )
 
 
+def _start_browser_playback(config: MorningBriefConfig, url: str) -> str | None:
+    if config.browser_play_command:
+        command = config.browser_play_command.replace("{{url}}", url)
+        completed = subprocess.run(command, shell=True, check=False)
+        if completed.returncode != 0:
+            raise RuntimeError(f"Configured browser play command failed with exit code {completed.returncode}: {command}")
+        return command
+
+    if shutil.which("playerctl"):
+        completed = subprocess.run(["playerctl", "play"], check=False)
+        if completed.returncode == 0:
+            return "playerctl play"
+
+    if shutil.which("xdotool"):
+        xdotool_commands = [
+            "xdotool search --onlyvisible --name 'YouTube Music' windowactivate --sync key space",
+            "xdotool search --onlyvisible --name 'YouTube' windowactivate --sync key space",
+        ]
+        for command in xdotool_commands:
+            completed = subprocess.run(command, shell=True, check=False)
+            if completed.returncode == 0:
+                return command
+
+    return None
+
+
 def _memory_db_path(config: MorningBriefConfig) -> Path:
     return Path.home() / ".vita" / config.vita_name / "memories.db"
 
@@ -789,6 +818,20 @@ def _weather_alert_note(high_f: float | None, low_f: float | None, precip: Any) 
     if low_f is not None and low_f <= 35:
         return "Bit of a sharp morning, so perhaps don't wander out dressed for optimism."
     return None
+
+
+def _with_autoplay(url: str) -> str:
+    if not url:
+        return url
+    parsed = urlparse(url)
+    query = parse_qs(parsed.query)
+    query["autoplay"] = ["1"]
+    rebuilt_query = "&".join(
+        f"{key}={value}"
+        for key, values in query.items()
+        for value in values
+    )
+    return parsed._replace(query=rebuilt_query).geturl()
 
 
 def _xml_text(node: ET.Element | None) -> str:
