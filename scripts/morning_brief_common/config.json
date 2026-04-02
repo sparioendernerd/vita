@@ -24,6 +24,7 @@
   ],
   "browser_open_command": "xdg-open \"{{url}}\"",
   "browser_play_command": "",
+  "browser_close_command": "",
   "browser_start_delay_seconds": 8,
   "playback_buffer_seconds": 2,
   "audio_player_command": "",

@@ -634,10 +634,12 @@ def _play_song_via_browser(config: MorningBriefConfig, selected_track: dict[str,
     play_command = _start_browser_playback(config, url)
     wait_seconds = max(15, duration) + max(0, int(config.playback_buffer_seconds))
     time.sleep(wait_seconds)
+    close_result = _close_browser_playback(config, process, url)
     return {
         "status": "ok",
         "command": command,
         "play_command": play_command,
+        "close_result": close_result,
         "pid": process.pid,
         "wait_seconds": wait_seconds,
     }
@@ -757,6 +759,67 @@ def _start_browser_playback(config: MorningBriefConfig, url: str) -> str | None:
         completed = subprocess.run(["playerctl", "play"], check=False)
         if completed.returncode == 0:
             return "playerctl play"
+
+    return None
+
+
+def _close_browser_playback(config: MorningBriefConfig, process: subprocess.Popen[Any], url: str) -> dict[str, Any]:
+    if config.browser_close_command:
+        command = config.browser_close_command.replace("{{url}}", url)
+        completed = subprocess.run(command, shell=True, check=False)
+        if completed.returncode != 0:
+            raise RuntimeError(f"Configured browser close command failed with exit code {completed.returncode}: {command}")
+        return {"method": "configured_command", "command": command}
+
+    chrome_close = _close_chrome_music_window(url)
+    if chrome_close is not None:
+        return chrome_close
+
+    if process.poll() is None:
+        process.terminate()
+        try:
+            process.wait(timeout=5)
+            return {"method": "launcher_terminate", "pid": process.pid}
+        except subprocess.TimeoutExpired:
+            process.kill()
+            process.wait(timeout=5)
+            return {"method": "launcher_kill", "pid": process.pid}
+
+    return {"method": "none", "reason": "launcher_already_exited"}
+
+
+def _close_chrome_music_window(url: str) -> dict[str, Any] | None:
+    if not shutil.which("pkill"):
+        return None
+
+    parsed = urlparse(url)
+    query = parse_qs(parsed.query)
+    video_id = ""
+    video_values = query.get("v")
+    if video_values:
+        video_id = str(video_values[0]).strip()
+
+    patterns = []
+    if video_id:
+        patterns.extend(
+            [
+                f'chrome.*music.youtube.com/watch.*v={video_id}',
+                f'google-chrome.*music.youtube.com/watch.*v={video_id}',
+                f'chromium.*music.youtube.com/watch.*v={video_id}',
+            ]
+        )
+    patterns.extend(
+        [
+            "chrome.*music.youtube.com",
+            "google-chrome.*music.youtube.com",
+            "chromium.*music.youtube.com",
+        ]
+    )
+
+    for pattern in patterns:
+        completed = subprocess.run(["pkill", "-f", pattern], check=False)
+        if completed.returncode == 0:
+            return {"method": "pkill", "pattern": pattern}
 
     return None
 

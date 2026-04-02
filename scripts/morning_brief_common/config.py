@@ -25,6 +25,7 @@ class MorningBriefConfig:
     news_feed_urls: list[str]
     browser_open_command: str
     browser_play_command: str
+    browser_close_command: str
     browser_start_delay_seconds: int
     playback_buffer_seconds: int
     audio_player_command: str
@@ -80,6 +81,7 @@ def load_config() -> MorningBriefConfig:
         news_feed_urls=[str(item) for item in raw["news_feed_urls"]],
         browser_open_command=os.environ.get("MORNING_BRIEF_BROWSER_COMMAND", str(raw["browser_open_command"])),
         browser_play_command=os.environ.get("MORNING_BRIEF_BROWSER_PLAY_COMMAND", str(raw.get("browser_play_command") or "")),
+        browser_close_command=os.environ.get("MORNING_BRIEF_BROWSER_CLOSE_COMMAND", str(raw.get("browser_close_command") or "")),
         browser_start_delay_seconds=int(os.environ.get("MORNING_BRIEF_BROWSER_START_DELAY", str(raw["browser_start_delay_seconds"]))),
         playback_buffer_seconds=int(os.environ.get("MORNING_BRIEF_PLAYBACK_BUFFER", str(raw["playback_buffer_seconds"]))),
         audio_player_command=os.environ.get("MORNING_BRIEF_AUDIO_PLAYER", str(raw["audio_player_command"])),
