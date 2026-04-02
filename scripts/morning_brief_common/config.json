@@ -26,7 +26,7 @@
   "browser_play_command": "",
   "browser_close_command": "",
   "browser_start_delay_seconds": 8,
-  "playback_buffer_seconds": 2,
+  "playback_buffer_seconds": 0,
   "audio_player_command": "",
   "tts_model": "gemini-2.5-flash-preview-tts",
   "tts_voice_name": "Algieba"

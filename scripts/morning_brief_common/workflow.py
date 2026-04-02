@@ -630,6 +630,7 @@ def _play_song_via_browser(config: MorningBriefConfig, selected_track: dict[str,
     process = subprocess.Popen(command, shell=True)
     startup_delay = max(0, int(config.browser_start_delay_seconds))
     duration = int(selected_track.get("duration_seconds") or 0)
+    close_buffer_seconds = max(0, int(config.playback_buffer_seconds))
     time.sleep(startup_delay)
     play_command = _start_browser_playback(config, url)
     manual_play_triggered = _manual_play_triggered(config, play_command, url)
@@ -645,6 +646,8 @@ def _play_song_via_browser(config: MorningBriefConfig, selected_track: dict[str,
         "play_command": play_command,
         "close_result": close_result,
         "pid": process.pid,
+        "track_duration_seconds": duration,
+        "close_buffer_seconds": close_buffer_seconds,
         "manual_play_triggered": manual_play_triggered,
         "startup_delay_seconds": startup_delay,
         "wait_seconds": wait_seconds,
