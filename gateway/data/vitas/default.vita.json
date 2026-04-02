@@ -69,7 +69,7 @@
     {
       "id": "morning-brief-collect-weather",
       "cron": "30 2 * * *",
-      "description": "Fetch the White Plains weather snapshot for the Morning Brief.",
+      "description": "Fetch the weather snapshot for the Morning Brief.",
       "action": "Run the `morning_brief_collect_weather` script for the current local date. Do not perform any other work. Return a terse status summary.",
       "timezone": "America/New_York",
       "enabled": true,
