@@ -4,6 +4,16 @@ import { join } from "node:path";
 import { homedir } from "node:os";
 import { logger } from "../logger.js";
 
+const scheduledTaskSchema = z.object({
+  id: z.string().optional(),
+  cron: z.string(),
+  action: z.string(),
+  description: z.string().optional(),
+  enabled: z.boolean().default(true),
+  timezone: z.string().optional(),
+  tools: z.array(z.string()).optional(),
+});
+
 export const vitaConfigSchema = z.object({
   name: z.string().regex(/^[a-z][a-z0-9_-]*$/),
   displayName: z.string(),
@@ -20,23 +30,19 @@ export const vitaConfigSchema = z.object({
     .array(z.string())
     .default(["read_memory", "write_memory", "search_memory", "get_current_time", "deactivate_agent", "google_search"]),
   discordChannels: z.array(z.string()).default([]),
-  scheduledTasks: z
-    .array(
-      z.object({
-        cron: z.string(),
-        action: z.string(),
-        description: z.string().optional(),
-      })
-    )
-    .default([]),
+  scheduledTasks: z.array(scheduledTaskSchema).default([]),
 });
 
 export type VitaConfig = z.infer<typeof vitaConfigSchema>;
+export type ScheduledTaskConfig = z.infer<typeof scheduledTaskSchema>;
+type RegistryListener = () => void;
 
 export class VitaRegistry {
   private vitas = new Map<string, VitaConfig>();
+  private configPaths = new Map<string, string>();
   private vitasDir: string;
   private watchedPaths = new Set<string>();
+  private listeners = new Set<RegistryListener>();
 
   constructor(vitasDir: string) {
     this.vitasDir = vitasDir;
@@ -76,6 +82,7 @@ export class VitaRegistry {
         }
 
         this.vitas.set(config.name, config);
+        this.configPaths.set(config.name, filePath);
         logger.info(`Loaded VITA: ${config.displayName} (${config.name})`);
       } catch (err) {
         logger.error(`Failed to load VITA config ${file}: ${err}`);
@@ -88,6 +95,7 @@ export class VitaRegistry {
     
     // Ensure all loaded paths are tracked and watched if watchForChanges was already called
     this.setupWatchers();
+    this.emitChange();
   }
 
   get(name: string): VitaConfig | undefined {
@@ -100,6 +108,27 @@ export class VitaRegistry {
 
   getAll(): VitaConfig[] {
     return Array.from(this.vitas.values());
+  }
+
+  getConfigPath(name: string): string | undefined {
+    return this.configPaths.get(name);
+  }
+
+  onChange(listener: RegistryListener): () => void {
+    this.listeners.add(listener);
+    return () => {
+      this.listeners.delete(listener);
+    };
+  }
+
+  private emitChange(): void {
+    for (const listener of this.listeners) {
+      try {
+        listener();
+      } catch (err) {
+        logger.error(`VITA registry listener failed: ${err}`);
+      }
+    }
   }
 
   private setupWatchers(): void {

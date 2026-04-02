@@ -6,7 +6,7 @@
   "voiceName": "Algieba",
   "liveModel": "gemini-3.1-flash-live-preview",
   "textModel": "gemini-3-flash-preview",
-  "heartbeatModel": "ollama/gemma3",
+  "heartbeatModel": "ollama/gemma3:4b",
   "heartbeatOllamaUrl": "http://localhost:11434",
   "wakeWords": [
     "hey_jarvis"
@@ -28,6 +28,9 @@
     "enable_screenshare",
     "disable_vision",
     "ingest_knowledge",
+    "schedule_task",
+    "list_scheduled_tasks",
+    "remove_scheduled_task",
     "media_play_pause",
     "media_next_track",
     "media_prev_track",

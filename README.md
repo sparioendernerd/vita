@@ -13,6 +13,7 @@ VITA is a modular, personality-driven assistant with a split Gateway/Node archit
 - SQLite + vector-backed memory.
 - SQLite memory works by default; Chroma semantic memory is optional via `CHROMA_URL`.
 - Gateway-side `system_run` and `system_notify`.
+- Cron-style scheduled tasks that can execute VITA tool workflows on a schedule.
 - Discord text messaging in both directions.
 - Discord file/image attachments from the gateway machine via `discord_send_file`.
 - Tailscale-ready remote access.
@@ -54,6 +55,29 @@ Example:
   "tools": ["system_notify", "discord_notify"]
 }
 ```
+
+## Scheduled Tasks
+
+Each VITA config can include `scheduledTasks` entries. The gateway watches these and runs them on time using the VITA's text model plus its enabled tools.
+
+Example:
+
+```json
+{
+  "scheduledTasks": [
+    {
+      "id": "daily-research",
+      "cron": "0 1 * * *",
+      "description": "Daily research sweep",
+      "action": "Research notable AI and tooling updates from the last day, save useful findings to memory, and notify Mr Vailen on Discord with a concise summary.",
+      "timezone": "America/New_York",
+      "enabled": true
+    }
+  ]
+}
+```
+
+You can also create, list, and remove these tasks from VITA itself through the `schedule_task`, `list_scheduled_tasks`, and `remove_scheduled_task` tools.
 
 DMs to the bot are routed to the first loaded VITA automatically. Outbound `discord_notify` will prefer `DISCORD_DM_USER_ID`, and if that is not set it will fall back to the last user who DM'd that VITA.
 

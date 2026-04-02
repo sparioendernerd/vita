@@ -14,6 +14,7 @@ import { setupTailscale, teardownTailscale } from "./network/tailscale.js";
 import { existsSync } from "node:fs";
 import { logger } from "./logger.js";
 import { DiscordBridge } from "./discord/bridge.js";
+import { VitaScheduler } from "./scheduler/index.js";
 
 // ── Environment Setup ────────────────────────────────────────────────────────
 // Try loading .env from root, then from current directory
@@ -107,6 +108,8 @@ async function main() {
   // ── Start Gateway Server ────────────────────────────────────────────────
   const server = new GatewayServer(port, host, vitaRegistry, geminiApiKey, config, gatewayToken, discordBridge);
   discordBridge?.attachGateway(server, config);
+  const scheduler = new VitaScheduler(vitaRegistry, server, geminiApiKey, config, discordBridge);
+  scheduler.start();
 
   // Heartbeat ping every 30 seconds
   setInterval(() => {
@@ -132,6 +135,7 @@ async function main() {
     logger.info("Shutting down...");
     teardownTailscale(config.gateway.tailscale);
     void discordBridge?.stop();
+    scheduler.stop();
     server.close();
     process.exit(0);
   };

@@ -276,6 +276,63 @@ def build_tool_declarations(vita_config: dict) -> list[dict[str, Any]]:
                 },
             },
         },
+        "schedule_task": {
+            "name": "schedule_task",
+            "description": "Create a recurring scheduled task for yourself. Use this when Mr Vailen asks you to do something on a schedule such as daily, weekly, or at a specific time.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "cron": {
+                        "type": "string",
+                        "description": "Cron expression in the gateway timezone. For example, daily at 1am is '0 1 * * *'.",
+                    },
+                    "action": {
+                        "type": "string",
+                        "description": "The task instruction you should execute when the schedule fires.",
+                    },
+                    "description": {
+                        "type": "string",
+                        "description": "Optional short label for the task.",
+                    },
+                    "timezone": {
+                        "type": "string",
+                        "description": "Optional IANA timezone such as 'America/New_York'.",
+                    },
+                    "enabled": {
+                        "type": "boolean",
+                        "description": "Whether the task should start enabled. Defaults to true.",
+                    },
+                    "tools": {
+                        "type": "array",
+                        "items": {"type": "string"},
+                        "description": "Optional subset of tools the scheduled task may use.",
+                    },
+                },
+                "required": ["cron", "action"],
+            },
+        },
+        "list_scheduled_tasks": {
+            "name": "list_scheduled_tasks",
+            "description": "List your currently scheduled recurring tasks.",
+            "parameters": {
+                "type": "object",
+                "properties": {},
+            },
+        },
+        "remove_scheduled_task": {
+            "name": "remove_scheduled_task",
+            "description": "Remove a scheduled recurring task by its ID.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "id": {
+                        "type": "string",
+                        "description": "The scheduled task ID returned by list_scheduled_tasks.",
+                    }
+                },
+                "required": ["id"],
+            },
+        },
         "media_play_pause": {
             "name": "media_play_pause",
             "description": "Toggles play/pause for the system's active media player (e.g. Spotify, YouTube).",

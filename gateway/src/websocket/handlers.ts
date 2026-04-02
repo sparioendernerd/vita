@@ -23,6 +23,7 @@ import { appendTranscript } from "../knowledge/transcript-logger.js";
 import { ingestContent } from "../knowledge/ingest.js";
 import type { GatewayConfig } from "../config/gateway-config.js";
 import type { DiscordBridge } from "../discord/bridge.js";
+import { addScheduledTask, listScheduledTasks, removeScheduledTask } from "../scheduler/task-config.js";
 
 export type MessageHandler = (node: NodeConnection, msg: ProtocolMessage) => void;
 export type MessageHandlers = Record<string, MessageHandler>;
@@ -195,6 +196,31 @@ export function createHandlers(
             } else {
               result = { success: false, error: ingestResult.error };
             }
+          } else if (payload.toolName === "schedule_task") {
+            result = {
+              success: true,
+              task: addScheduledTask(vitaRegistry, node.vitaName, {
+                cron: payload.args.cron as string,
+                action: payload.args.action as string,
+                description: payload.args.description as string | undefined,
+                timezone: payload.args.timezone as string | undefined,
+                enabled: typeof payload.args.enabled === "boolean" ? payload.args.enabled : undefined,
+                tools: payload.args.tools as string[] | undefined,
+              }),
+            };
+          } else if (payload.toolName === "list_scheduled_tasks") {
+            result = {
+              tasks: listScheduledTasks(vitaRegistry, node.vitaName),
+            };
+          } else if (payload.toolName === "remove_scheduled_task") {
+            const removed = removeScheduledTask(
+              vitaRegistry,
+              node.vitaName,
+              payload.args.id as string
+            );
+            result = removed
+              ? { success: true, removedId: payload.args.id }
+              : { success: false, error: `No scheduled task found with id '${payload.args.id as string}'.` };
           } else {
             result = { message: `Unknown tool: ${payload.toolName}` };
           }
