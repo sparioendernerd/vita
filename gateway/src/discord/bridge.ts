@@ -17,6 +17,7 @@ import { GoogleGenAI } from "@google/genai";
 interface DiscordBridgeOptions {
   token: string;
   applicationId?: string;
+  defaultDmUserId?: string;
   geminiApiKey: string;
   vitaRegistry: VitaRegistry;
 }
@@ -35,14 +36,17 @@ export class DiscordBridge {
   private readonly geminiApiKey: string;
   private readonly vitaRegistry: VitaRegistry;
   private readonly sessionIds = new Map<SessionKey, string>();
+  private readonly lastDmUsers = new Map<string, string>();
   private readonly inFlight = new Set<SessionKey>();
   private readonly token: string;
   private readonly applicationId?: string;
+  private readonly defaultDmUserId?: string;
   private ready = false;
 
   constructor(options: DiscordBridgeOptions) {
     this.token = options.token;
     this.applicationId = options.applicationId;
+    this.defaultDmUserId = options.defaultDmUserId;
     this.geminiApiKey = options.geminiApiKey;
     this.vitaRegistry = options.vitaRegistry;
     this.genai = new GoogleGenAI({ apiKey: options.geminiApiKey });
@@ -91,12 +95,30 @@ export class DiscordBridge {
       return { success: false, sent: 0, error: `Unknown VITA: ${vitaName}` };
     }
 
-    if (!vita.discordChannels.length) {
-      return { success: false, sent: 0, error: `No Discord channels configured for ${vitaName}` };
-    }
-
+    const dmTargetUserId = this.getDmTargetUserId(vita);
     const message = `**${payload.title.trim()}**\n${payload.body.trim()}`.trim();
     let sent = 0;
+
+    if (dmTargetUserId) {
+      const user = await this.fetchUser(dmTargetUserId);
+      if (user) {
+        const dmChannel = await user.createDM();
+        await dmChannel.send(message);
+        sent += 1;
+      }
+    }
+
+    if (!vita.discordChannels.length) {
+      if (!sent) {
+        return {
+          success: false,
+          sent: 0,
+          error: `No Discord DM target or channels configured for ${vitaName}`,
+        };
+      }
+      logger.info(`[discord] Sent outbound DM notification for ${vitaName}`);
+      return { success: true, sent };
+    }
 
     for (const channelId of vita.discordChannels) {
       const channel = await this.fetchChannel(channelId);
@@ -113,10 +135,10 @@ export class DiscordBridge {
     }
 
     if (!sent) {
-      return { success: false, sent: 0, error: "No configured Discord channels were reachable" };
+      return { success: false, sent: 0, error: "No Discord DM target or configured channels were reachable" };
     }
 
-    logger.info(`[discord] Sent outbound notification for ${vitaName} to ${sent} channel(s)`);
+    logger.info(`[discord] Sent outbound notification for ${vitaName} to ${sent} destination(s)`);
     return { success: true, sent };
   }
 
@@ -171,7 +193,11 @@ export class DiscordBridge {
     }
 
     if (message.channel.type === ChannelType.DM) {
-      return this.vitaRegistry.getFirst();
+      const vita = this.vitaRegistry.getFirst();
+      if (vita) {
+        this.lastDmUsers.set(vita.name, message.author.id);
+      }
+      return vita;
     }
 
     return undefined;
@@ -325,6 +351,19 @@ export class DiscordBridge {
       logger.error(`[discord] Failed to fetch channel ${channelId}: ${error.message}`);
       return null;
     }
+  }
+
+  private async fetchUser(userId: string) {
+    try {
+      return await this.client.users.fetch(userId);
+    } catch (error: any) {
+      logger.error(`[discord] Failed to fetch user ${userId}: ${error.message}`);
+      return null;
+    }
+  }
+
+  private getDmTargetUserId(vita: VitaConfig): string | undefined {
+    return this.defaultDmUserId?.trim() || this.lastDmUsers.get(vita.name);
   }
 
   private canSend(

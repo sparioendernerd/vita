@@ -94,6 +94,7 @@ async function main() {
     discordBridge = new DiscordBridge({
       token: process.env.DISCORD_TOKEN,
       applicationId: process.env.DISCORD_APPLICATION_ID,
+      defaultDmUserId: process.env.DISCORD_DM_USER_ID,
       geminiApiKey,
       vitaRegistry,
     });

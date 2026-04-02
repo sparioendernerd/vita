@@ -40,7 +40,8 @@ Check `~/.vita/gateway-token` for the generated gateway token if you use token a
 2. Enable the `Message Content Intent`.
 3. Put the bot token in `DISCORD_TOKEN` and the app ID in `DISCORD_APPLICATION_ID`.
 4. Invite the bot to your server.
-5. Add one or more Discord channel IDs to the target VITA config in `gateway/data/vitas/default.vita.json`.
+5. Optional: add one or more Discord channel IDs to the target VITA config in `gateway/data/vitas/default.vita.json` if you want server-channel replies.
+6. Set `DISCORD_DM_USER_ID` in `.env` if you want `discord_notify` to DM a fixed Discord account.
 
 Example:
 
@@ -52,7 +53,7 @@ Example:
 }
 ```
 
-Once configured, messages sent in those channels will be answered by that VITA, and Graves can proactively send Discord notifications with `discord_notify`.
+DMs to the bot are routed to the first loaded VITA automatically. Outbound `discord_notify` will prefer `DISCORD_DM_USER_ID`, and if that is not set it will fall back to the last user who DM'd that VITA.
 
 ---
 

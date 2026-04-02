@@ -6,6 +6,7 @@ const envSchema = z.object({
   GATEWAY_HOST: z.string().default("0.0.0.0"),
   DISCORD_TOKEN: z.string().optional(),
   DISCORD_APPLICATION_ID: z.string().optional(),
+  DISCORD_DM_USER_ID: z.string().optional(),
   OLLAMA_URL: z.string().default("http://localhost:11434"),
 });
 
