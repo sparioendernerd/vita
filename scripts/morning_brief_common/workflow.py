@@ -745,19 +745,18 @@ def _start_browser_playback(config: MorningBriefConfig, url: str) -> str | None:
         return command
 
     if shutil.which("playerctl"):
+        status = subprocess.run(
+            ["playerctl", "status"],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        if status.returncode == 0 and status.stdout.strip().lower() == "playing":
+            return "playerctl status"
+
         completed = subprocess.run(["playerctl", "play"], check=False)
         if completed.returncode == 0:
             return "playerctl play"
-
-    if shutil.which("xdotool"):
-        xdotool_commands = [
-            "xdotool search --onlyvisible --name 'YouTube Music' windowactivate --sync key space",
-            "xdotool search --onlyvisible --name 'YouTube' windowactivate --sync key space",
-        ]
-        for command in xdotool_commands:
-            completed = subprocess.run(command, shell=True, check=False)
-            if completed.returncode == 0:
-                return command
 
     return None
 
