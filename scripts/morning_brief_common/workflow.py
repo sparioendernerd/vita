@@ -634,7 +634,7 @@ def _play_song_via_browser(config: MorningBriefConfig, selected_track: dict[str,
     play_command = _start_browser_playback(config, url)
     wait_seconds = max(15, duration) + max(0, int(config.playback_buffer_seconds))
     time.sleep(wait_seconds)
-    close_result = _close_browser_playback(config, process, url)
+    close_result = _close_browser_playback(config, process, url, selected_track)
     return {
         "status": "ok",
         "command": command,
@@ -763,32 +763,64 @@ def _start_browser_playback(config: MorningBriefConfig, url: str) -> str | None:
     return None
 
 
-def _close_browser_playback(config: MorningBriefConfig, process: subprocess.Popen[Any], url: str) -> dict[str, Any]:
+def _close_browser_playback(
+    config: MorningBriefConfig,
+    process: subprocess.Popen[Any],
+    url: str,
+    selected_track: dict[str, Any],
+) -> dict[str, Any]:
+    attempts: list[dict[str, Any]] = []
+
+    pause_result = _stop_browser_playback()
+    if pause_result is not None:
+        attempts.append(pause_result)
+
     if config.browser_close_command:
         command = config.browser_close_command.replace("{{url}}", url)
         completed = subprocess.run(command, shell=True, check=False)
         if completed.returncode != 0:
             raise RuntimeError(f"Configured browser close command failed with exit code {completed.returncode}: {command}")
-        return {"method": "configured_command", "command": command}
+        return {"method": "configured_command", "command": command, "attempts": attempts}
 
-    chrome_close = _close_chrome_music_window(url)
+    chrome_close = _close_chrome_music_window(url, selected_track)
     if chrome_close is not None:
+        chrome_close["attempts"] = attempts
         return chrome_close
 
     if process.poll() is None:
         process.terminate()
         try:
             process.wait(timeout=5)
-            return {"method": "launcher_terminate", "pid": process.pid}
+            return {"method": "launcher_terminate", "pid": process.pid, "attempts": attempts}
         except subprocess.TimeoutExpired:
             process.kill()
             process.wait(timeout=5)
-            return {"method": "launcher_kill", "pid": process.pid}
+            return {"method": "launcher_kill", "pid": process.pid, "attempts": attempts}
 
-    return {"method": "none", "reason": "launcher_already_exited"}
+    return {"method": "none", "reason": "launcher_already_exited", "attempts": attempts}
 
 
-def _close_chrome_music_window(url: str) -> dict[str, Any] | None:
+def _stop_browser_playback() -> dict[str, Any] | None:
+    if not shutil.which("playerctl"):
+        return None
+
+    completed = subprocess.run(["playerctl", "pause"], check=False)
+    return {
+        "method": "playerctl_pause",
+        "returncode": completed.returncode,
+    }
+
+
+def _close_chrome_music_window(url: str, selected_track: dict[str, Any]) -> dict[str, Any] | None:
+    title = str(selected_track.get("title") or "").strip()
+    title_attempt = _close_window_by_title(title)
+    if title_attempt is not None:
+        return title_attempt
+
+    music_attempt = _close_window_by_title("YouTube Music")
+    if music_attempt is not None:
+        return music_attempt
+
     if not shutil.which("pkill"):
         return None
 
@@ -820,6 +852,33 @@ def _close_chrome_music_window(url: str) -> dict[str, Any] | None:
         completed = subprocess.run(["pkill", "-f", pattern], check=False)
         if completed.returncode == 0:
             return {"method": "pkill", "pattern": pattern}
+
+    return None
+
+
+def _close_window_by_title(title_fragment: str) -> dict[str, Any] | None:
+    normalized = title_fragment.strip()
+    if not normalized:
+        return None
+
+    if shutil.which("wmctrl"):
+        completed = subprocess.run(["wmctrl", "-c", normalized], check=False)
+        if completed.returncode == 0:
+            return {"method": "wmctrl", "title_fragment": normalized}
+
+    if shutil.which("xdotool"):
+        search = subprocess.run(
+            ["xdotool", "search", "--onlyvisible", "--name", normalized],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        if search.returncode == 0:
+            window_ids = [line.strip() for line in search.stdout.splitlines() if line.strip()]
+            for window_id in reversed(window_ids):
+                close = subprocess.run(["xdotool", "windowclose", window_id], check=False)
+                if close.returncode == 0:
+                    return {"method": "xdotool", "title_fragment": normalized, "window_id": window_id}
 
     return None
 
