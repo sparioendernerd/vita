@@ -5,7 +5,7 @@
   "voicePrompt": "Use a heavy posh British accent at all times. Snappy delivery.",
   "voiceName": "Algieba",
   "liveModel": "gemini-3.1-flash-live-preview",
-  "textModel": "gemini-2.5-flash",
+  "textModel": "gemini-3-flash-preview",
   "heartbeatModel": "ollama/gemma3",
   "heartbeatOllamaUrl": "http://localhost:11434",
   "wakeWords": [
