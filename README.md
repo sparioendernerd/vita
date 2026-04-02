@@ -13,6 +13,7 @@ VITA is a modular, personality-driven assistant with a split Gateway/Node archit
 - SQLite + vector-backed memory.
 - SQLite memory works by default; Chroma semantic memory is optional via `CHROMA_URL`.
 - Gateway-side `system_run` and `system_notify`.
+- Gateway-side reusable `scripts/` tool system for custom script folders.
 - Cron-style scheduled tasks that can execute VITA tool workflows on a schedule.
 - Discord text messaging in both directions.
 - Discord file/image attachments from the gateway machine via `discord_send_file`.
@@ -80,6 +81,12 @@ Example:
 You can also create, list, and remove these tasks from VITA itself through the `schedule_task`, `list_scheduled_tasks`, and `remove_scheduled_task` tools.
 
 DMs to the bot are routed to the first loaded VITA automatically. Outbound `discord_notify` will prefer `DISCORD_DM_USER_ID`, and if that is not set it will fall back to the last user who DM'd that VITA.
+
+## Scripts System
+
+Custom gateway scripts live in the top-level `scripts/` folder. Each script gets its own folder with a `script.json` manifest plus whatever files it needs. Graves can inspect them with `list_scripts` and run them with `run_script`.
+
+See [docs/scripts-system.md](docs/scripts-system.md) for the folder format and the included Codex-powered scaffolding example.
 
 ## Optional Chroma
 

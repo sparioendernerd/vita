@@ -20,6 +20,8 @@
     "deactivate_agent",
     "google_search",
     "system_run",
+    "list_scripts",
+    "run_script",
     "system_notify",
     "discord_notify",
     "discord_send_file",

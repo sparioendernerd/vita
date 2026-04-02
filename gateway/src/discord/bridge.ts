@@ -17,6 +17,7 @@ import { logger } from "../logger.js";
 import { GoogleGenAI, createPartFromFunctionResponse } from "@google/genai";
 import { executeSystemRun } from "../tools/system-run.js";
 import { sendSystemNotify } from "../tools/system-notify.js";
+import { listScripts, runScript } from "../tools/script-runner.js";
 import { ingestContent } from "../knowledge/ingest.js";
 import { makeTextModelFn } from "../gemini/text-client.js";
 import type { GatewayServer } from "../websocket/server.js";
@@ -563,6 +564,27 @@ export class DiscordBridge {
           required: ["command"],
         },
       },
+      list_scripts: {
+        name: "list_scripts",
+        description: "List registered gateway scripts that Graves can run.",
+        parametersJsonSchema: { type: "object", properties: {} },
+      },
+      run_script: {
+        name: "run_script",
+        description: "Run a registered gateway script by name with optional named arguments.",
+        parametersJsonSchema: {
+          type: "object",
+          properties: {
+            name: { type: "string" },
+            args: {
+              type: "object",
+              additionalProperties: true,
+            },
+            timeout: { type: "number" },
+          },
+          required: ["name"],
+        },
+      },
       system_notify: {
         name: "system_notify",
         description: "Send a desktop notification on the gateway host.",
@@ -750,6 +772,19 @@ export class DiscordBridge {
         return { ...runResult };
       }
 
+      if (toolName === "list_scripts") {
+        return { scripts: listScripts() };
+      }
+
+      if (toolName === "run_script") {
+        const result = await runScript(
+          String(args.name ?? ""),
+          isRecord(args.args) ? args.args : {},
+          typeof args.timeout === "number" ? args.timeout : undefined
+        );
+        return { ...result };
+      }
+
       if (toolName === "system_notify") {
         return await sendSystemNotify({
           callId: `discord-${Date.now()}`,
@@ -870,4 +905,8 @@ export class DiscordBridge {
   private makeSessionKey(vitaName: string, channelId: string): SessionKey {
     return `${vitaName}:${channelId}`;
   }
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
 }

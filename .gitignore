@@ -35,3 +35,4 @@ gateway/data/memory/**/*.json
 
 # other
 file_list.txt
+scripts/

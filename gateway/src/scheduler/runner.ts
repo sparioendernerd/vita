@@ -7,6 +7,7 @@ import { getMemoryStore } from "../memory/index.js";
 import { makeTextModelFn } from "../gemini/text-client.js";
 import { executeSystemRun } from "../tools/system-run.js";
 import { sendSystemNotify } from "../tools/system-notify.js";
+import { listScripts, runScript } from "../tools/script-runner.js";
 import type { DiscordBridge } from "../discord/bridge.js";
 import { ingestContent } from "../knowledge/ingest.js";
 
@@ -157,6 +158,19 @@ export class ScheduledTaskRunner {
       },
       required: ["command"],
     });
+    addFunction("list_scripts", "List registered gateway scripts.", {
+      type: "object",
+      properties: {},
+    });
+    addFunction("run_script", "Run a registered gateway script by name.", {
+      type: "object",
+      properties: {
+        name: { type: "string" },
+        args: { type: "object", additionalProperties: true },
+        timeout: { type: "integer" },
+      },
+      required: ["name"],
+    });
     addFunction("system_notify", "Send a desktop notification.", {
       type: "object",
       properties: {
@@ -262,6 +276,16 @@ export class ScheduledTaskRunner {
         timeout: typeof args.timeout === "number" ? args.timeout : undefined,
       }, this.deps.gatewayConfig.tools.exec)
     );
+    executors.set("list_scripts", async () => ({
+      scripts: listScripts(),
+    }));
+    executors.set("run_script", async (args) =>
+      runScript(
+        String(args.name),
+        isRecord(args.args) ? args.args : {},
+        typeof args.timeout === "number" ? args.timeout : undefined
+      )
+    );
     executors.set("system_notify", async (args) =>
       sendSystemNotify({
         callId: "scheduled-task",
@@ -359,4 +383,8 @@ export async function runScheduledTask(
     const message = err instanceof Error ? err.message : String(err);
     logger.error(`[scheduler] Task ${task.id ?? "(no-id)"} failed for ${vita.name}: ${message}`);
   }
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
