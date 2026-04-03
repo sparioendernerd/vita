@@ -100,7 +100,7 @@ async function promptForSpawn(options: { requireSharedProfile: boolean }) {
 
     let sharedUserProfile: string | undefined;
     if (options.requireSharedProfile) {
-      sharedUserProfile = (await rl.question("Tell VITA about yourself: ")).trim();
+      sharedUserProfile = (await rl.question("Tell VITA about yourself (shared across all VITAs): ")).trim();
       if (!sharedUserProfile) {
         throw new Error("Shared user profile is required for the first VITA.");
       }
@@ -135,11 +135,7 @@ async function main() {
 
       if (subcommand === "create") {
         const sharedProfile = readSharedUserProfile();
-        if (!sharedProfile) {
-          console.error("No shared user profile found. Run `spawn init` first.");
-          process.exit(1);
-        }
-        const answers = await promptForSpawn({ requireSharedProfile: false });
+        const answers = await promptForSpawn({ requireSharedProfile: !sharedProfile });
         const vita = createLocalVita(answers);
         console.log(`Created VITA: ${vita.displayName} (${vita.name})`);
         console.log("");
