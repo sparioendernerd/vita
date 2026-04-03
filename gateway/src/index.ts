@@ -14,7 +14,7 @@ import { loadOrCreateToken } from "./auth/token-manager.js";
 import { setupTailscale, teardownTailscale } from "./network/tailscale.js";
 import { existsSync } from "node:fs";
 import { logger } from "./logger.js";
-import { DiscordBridge } from "./discord/bridge.js";
+import { DiscordBridgeManager } from "./discord/bridge.js";
 import { VitaScheduler } from "./scheduler/index.js";
 
 // ── Environment Setup ────────────────────────────────────────────────────────
@@ -97,19 +97,17 @@ async function main() {
   }
   vitaRegistry.watchForChanges();
 
-  let discordBridge: DiscordBridge | undefined;
-  if (process.env.DISCORD_TOKEN) {
-    discordBridge = new DiscordBridge({
-      token: process.env.DISCORD_TOKEN,
-      applicationId: process.env.DISCORD_APPLICATION_ID,
-      defaultDmUserId: process.env.DISCORD_DM_USER_ID,
+  let discordBridge: DiscordBridgeManager | undefined;
+  discordBridge = new DiscordBridgeManager({
       geminiApiKey,
       vitaRegistry,
     });
-    await discordBridge.start();
+  await discordBridge.start();
+  if (discordBridge.hasAnyConfiguredBots()) {
     logger.info("Discord bridge enabled");
   } else {
-    logger.info("Discord bridge disabled (no DISCORD_TOKEN set)");
+    discordBridge = undefined;
+    logger.info("Discord bridge disabled (no per-VITA Discord tokens configured)");
   }
 
   // ── Start Gateway Server ────────────────────────────────────────────────

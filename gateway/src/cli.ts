@@ -31,8 +31,11 @@ import { isTailscaleAvailable, getTailscaleIP, getTailscaleHostname } from "./ne
 import {
   createLocalVita,
   formatVitaList,
+  getDiscordPromptSummary,
+  getWakeWordInstructions,
   hasLocalVitas,
   importExistingGraves,
+  listGeminiVoices,
   listVitaSummaries,
   readSharedUserProfile,
 } from "./config/spawn-storage.js";
@@ -67,9 +70,33 @@ async function promptForSpawn(options: { requireSharedProfile: boolean }) {
   try {
     const name = (await rl.question("VITA name: ")).trim();
     const personality = (await rl.question("Personality: ")).trim();
+    const voices = listGeminiVoices();
+    console.log(`Gemini voices: ${voices.join(", ")}`);
+    const voiceName = (await rl.question("Voice name: ")).trim();
+    const voicePrompt = (await rl.question("Voice instructions: ")).trim();
+    const wakeWord = (await rl.question("Wake phrase: ")).trim();
     if (!name || !personality) {
       throw new Error("Name and personality are required.");
     }
+    if (!voiceName || !voices.includes(voiceName as (typeof voices)[number])) {
+      throw new Error(`Voice name must be one of: ${voices.join(", ")}`);
+    }
+    if (!voicePrompt || !wakeWord) {
+      throw new Error("Voice instructions and wake phrase are required.");
+    }
+
+    const configureDiscord = (await rl.question("Configure Discord bot now? (y/N): ")).trim().toLowerCase();
+    const discord = configureDiscord === "y" || configureDiscord === "yes"
+      ? {
+          applicationId: (await rl.question("Discord application ID (optional): ")).trim() || undefined,
+          defaultDmUserId: (await rl.question("Default DM user ID (optional): ")).trim() || undefined,
+          channels: ((await rl.question("Discord channel IDs (comma-separated, optional): ")).trim()
+            .split(",")
+            .map((value) => value.trim())
+            .filter(Boolean)),
+          botToken: (await rl.question("Discord bot token (optional): ")).trim() || undefined,
+        }
+      : undefined;
 
     let sharedUserProfile: string | undefined;
     if (options.requireSharedProfile) {
@@ -79,7 +106,7 @@ async function promptForSpawn(options: { requireSharedProfile: boolean }) {
       }
     }
 
-    return { name, personality, sharedUserProfile };
+    return { name, personality, sharedUserProfile, voiceName, voicePrompt, wakeWord, discord };
   } finally {
     rl.close();
   }
@@ -101,6 +128,8 @@ async function main() {
         const answers = await promptForSpawn({ requireSharedProfile: true });
         const vita = createLocalVita(answers);
         console.log(`Created first VITA: ${vita.displayName} (${vita.name})`);
+        console.log("");
+        console.log(getWakeWordInstructions(vita.name, vita.wakeWords[0], vita.wakeWordSampleDir));
         return;
       }
 
@@ -113,11 +142,21 @@ async function main() {
         const answers = await promptForSpawn({ requireSharedProfile: false });
         const vita = createLocalVita(answers);
         console.log(`Created VITA: ${vita.displayName} (${vita.name})`);
+        console.log("");
+        console.log(getWakeWordInstructions(vita.name, vita.wakeWords[0], vita.wakeWordSampleDir));
         return;
       }
 
       if (subcommand === "list") {
         console.log(formatVitaList());
+        const summaries = listVitaSummaries();
+        if (summaries.length) {
+          console.log("");
+          for (const vita of summaries) {
+            const discord = getDiscordPromptSummary(vita.name);
+            console.log(`${vita.name}: voice + wake configured, discord token ${discord.hasBotToken ? "present" : "missing"}`);
+          }
+        }
         const shared = readSharedUserProfile();
         if (shared) {
           console.log("");
@@ -130,6 +169,8 @@ async function main() {
       if (subcommand === "import-graves") {
         const vita = importExistingGraves();
         console.log(`Imported ${vita.displayName} (${vita.name}) into local storage.`);
+        console.log("");
+        console.log(getWakeWordInstructions(vita.name, vita.wakeWords[0], vita.wakeWordSampleDir));
         return;
       }
 

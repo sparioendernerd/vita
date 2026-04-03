@@ -3,6 +3,7 @@ import { readFileSync, readdirSync, watchFile, existsSync } from "node:fs";
 import { basename, join } from "node:path";
 import { logger } from "../logger.js";
 import { getVitaConfigPath, getVitaDir, getVitaHome } from "./vita-home.js";
+import { normalizeBlockedTools } from "../tools/catalog.js";
 
 const scheduledTaskSchema = z.object({
   id: z.string().optional(),
@@ -13,6 +14,12 @@ const scheduledTaskSchema = z.object({
   timezone: z.string().optional(),
   tools: z.array(z.string()).optional(),
 });
+
+const discordConfigSchema = z.object({
+  applicationId: z.string().optional(),
+  defaultDmUserId: z.string().optional(),
+  channels: z.array(z.string()).default([]),
+}).default({});
 
 export const vitaConfigSchema = z.object({
   name: z.string().regex(/^[a-z][a-z0-9_-]*$/),
@@ -26,9 +33,12 @@ export const vitaConfigSchema = z.object({
   heartbeatModel: z.string().default("ollama/gemma3"),
   heartbeatOllamaUrl: z.string().default("http://localhost:11434"),
   wakeWords: z.array(z.string()).default(["hey_vita"]),
+  wakeWordSampleDir: z.string().optional().default("wakeword/refs"),
+  blockedTools: z.array(z.string()).default([]),
   tools: z
     .array(z.string())
-    .default(["read_memory", "write_memory", "search_memory", "get_current_time", "deactivate_agent", "google_search"]),
+    .optional(),
+  discord: discordConfigSchema,
   discordChannels: z.array(z.string()).default([]),
   scheduledTasks: z.array(scheduledTaskSchema).default([]),
 });
@@ -60,6 +70,9 @@ export class VitaRegistry {
     for (const filePath of files) {
       try {
         const raw = JSON.parse(readFileSync(filePath, "utf-8"));
+        if (!Array.isArray(raw.blockedTools)) {
+          raw.blockedTools = normalizeBlockedTools(raw);
+        }
         const config = vitaConfigSchema.parse(raw);
         
         // Load dynamically from ~/.vita/[name]

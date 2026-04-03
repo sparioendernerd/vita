@@ -36,6 +36,10 @@ export function getMailboxPath(): string {
   return join(getSharedDir(), "mailbox.json");
 }
 
+export function getSharedSchedulePath(): string {
+  return join(getSharedDir(), "schedule.json");
+}
+
 export function getVitaDir(vitaName: string): string {
   return join(getVitaHome(), vitaName);
 }
@@ -44,3 +48,6 @@ export function getVitaConfigPath(vitaName: string): string {
   return join(getVitaDir(vitaName), "config.json");
 }
 
+export function getVitaSecretsPath(vitaName: string): string {
+  return join(getVitaDir(vitaName), "secrets.json");
+}

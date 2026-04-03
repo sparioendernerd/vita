@@ -1,6 +1,6 @@
 import { GoogleGenAI } from "@google/genai";
 import { logger } from "../logger.js";
-import type { VitaConfig, ScheduledTaskConfig, VitaRegistry } from "../config/vita-registry.js";
+import type { VitaConfig, VitaRegistry } from "../config/vita-registry.js";
 import type { GatewayConfig } from "../config/gateway-config.js";
 import type { GatewayServer } from "../websocket/server.js";
 import { getMemoryStore } from "../memory/index.js";
@@ -8,8 +8,10 @@ import { makeTextModelFn } from "../gemini/text-client.js";
 import { executeSystemRun } from "../tools/system-run.js";
 import { sendSystemNotify } from "../tools/system-notify.js";
 import { listScripts, runScript } from "../tools/script-runner.js";
-import type { DiscordBridge } from "../discord/bridge.js";
+import type { DiscordBridgeManager } from "../discord/bridge.js";
 import { ingestContent } from "../knowledge/ingest.js";
+import { getAvailableToolNames, isToolBlocked } from "../tools/catalog.js";
+import type { SharedScheduleTask } from "../config/spawn-storage.js";
 
 const MAX_TOOL_STEPS = 8;
 
@@ -20,13 +22,13 @@ export interface ScheduledTaskRunnerDeps {
   server: GatewayServer;
   geminiApiKey: string;
   gatewayConfig: GatewayConfig;
-  discordBridge?: DiscordBridge;
+  discordBridge?: DiscordBridgeManager;
 }
 
 export class ScheduledTaskRunner {
   constructor(private readonly deps: ScheduledTaskRunnerDeps) {}
 
-  async runTask(vita: VitaConfig, task: ScheduledTaskConfig): Promise<string> {
+  async runTask(vita: VitaConfig, task: SharedScheduleTask): Promise<string> {
     const ai = new GoogleGenAI({ apiKey: this.deps.geminiApiKey });
     const tools = this.buildTools(vita, task);
     const executors = this.buildExecutors(vita);
@@ -106,8 +108,8 @@ export class ScheduledTaskRunner {
     return finalText || "Scheduled task stopped after reaching the tool step limit.";
   }
 
-  private buildTools(vita: VitaConfig, task: ScheduledTaskConfig): any[] {
-    const enabledTools = new Set(task.tools?.length ? task.tools : vita.tools);
+  private buildTools(vita: VitaConfig, task: SharedScheduleTask): any[] {
+    const enabledTools = new Set(task.tools?.length ? task.tools.filter((tool) => !isToolBlocked(vita, tool)) : getAvailableToolNames(vita));
     const tools: any[] = [];
     const functionTools: any[] = [];
 
@@ -371,7 +373,7 @@ export class ScheduledTaskRunner {
 export async function runScheduledTask(
   deps: ScheduledTaskRunnerDeps,
   vita: VitaConfig,
-  task: ScheduledTaskConfig
+  task: SharedScheduleTask
 ): Promise<void> {
   logger.info(`[scheduler] Starting task ${task.id ?? "(no-id)"} for ${vita.name}: ${task.cron}`);
   const runner = new ScheduledTaskRunner(deps);

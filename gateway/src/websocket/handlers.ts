@@ -22,9 +22,10 @@ import { sendSystemNotify } from "../tools/system-notify.js";
 import { appendTranscript } from "../knowledge/transcript-logger.js";
 import { ingestContent } from "../knowledge/ingest.js";
 import type { GatewayConfig } from "../config/gateway-config.js";
-import type { DiscordBridge } from "../discord/bridge.js";
+import type { DiscordBridgeManager } from "../discord/bridge.js";
 import { addScheduledTask, listScheduledTasks, removeScheduledTask } from "../scheduler/task-config.js";
 import { listVitaSummaries, markMailboxMessageRead, readMailboxMessages, readSharedUserProfile, sendMailboxMessage } from "../config/spawn-storage.js";
+import { isToolBlocked } from "../tools/catalog.js";
 
 export type MessageHandler = (node: NodeConnection, msg: ProtocolMessage) => void;
 export type MessageHandlers = Record<string, MessageHandler>;
@@ -37,7 +38,7 @@ export function createHandlers(
   server: GatewayServer,
   geminiApiKey: string,
   config?: GatewayConfig,
-  discordBridge?: DiscordBridge
+  discordBridge?: DiscordBridgeManager
 ): MessageHandlers {
   return {
     // ── Session ──────────────────────────────────────────────────────────
@@ -100,6 +101,21 @@ export function createHandlers(
     "tool:request": (node, msg) => {
       const payload = msg.payload as ToolRequestPayload;
       logger.info(`Tool request from ${node.id.substring(0, 8)}...: ${payload.toolName}(${JSON.stringify(payload.args)})`);
+      const vita = vitaRegistry.get(node.vitaName);
+      if (!vita) {
+        server.sendToNode(
+          node.id,
+          createMessage("tool:response", { callId: payload.callId, result: { error: "Unknown VITA" } })
+        );
+        return;
+      }
+      if (isToolBlocked(vita, payload.toolName)) {
+        server.sendToNode(
+          node.id,
+          createMessage("tool:response", { callId: payload.callId, result: { error: `Tool '${payload.toolName}' is blocked for ${vita.displayName}.` } })
+        );
+        return;
+      }
 
       const store = getMemoryStore(node.vitaName, geminiApiKey);
       let result: unknown;
@@ -129,18 +145,13 @@ export function createHandlers(
             );
             result = { memories };
           } else if (payload.toolName === "consolidate_memories") {
-            const vita = vitaRegistry.get(node.vitaName);
-            if (!vita) {
-              result = { error: "Unknown VITA" };
-            } else {
-              const textModelFn = makeTextModelFn(geminiApiKey, vita.textModel);
-              const consolidationResult = await store.consolidateMemories(
-                node.vitaName,
-                textModelFn,
-                { category: (payload.args.category as string | undefined) ?? "conversations" }
-              );
-              result = consolidationResult ?? { message: "Nothing to consolidate yet" };
-            }
+            const textModelFn = makeTextModelFn(geminiApiKey, vita.textModel);
+            const consolidationResult = await store.consolidateMemories(
+              node.vitaName,
+              textModelFn,
+              { category: (payload.args.category as string | undefined) ?? "conversations" }
+            );
+            result = consolidationResult ?? { message: "Nothing to consolidate yet" };
 
           // ── System tools (new) ──────────────────────────────────────
 

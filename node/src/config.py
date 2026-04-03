@@ -17,7 +17,7 @@ class NodeConfig(BaseModel):
     speaker_channels: int = 1
 
     # Wake word (local-wake)
-    wake_word_ref_dir: str = Field(default="wakeword/refs")  # folder containing .wav samples
+    wake_word_ref_dir: str = Field(default="wakeword/refs")  # legacy fallback; per-VITA config should override this
     wake_word_threshold: float = 0.1       # lower = more sensitive (adjust after comparing)
     wake_word_method: str = "embedding"    # 'embedding' (default) or 'mfcc'
     wake_word_buffer_size: float = 2.0     # seconds — should match max recording length

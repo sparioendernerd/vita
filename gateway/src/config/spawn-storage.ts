@@ -2,8 +2,26 @@ import { copyFileSync, existsSync, mkdirSync, readFileSync, readdirSync, writeFi
 import { join, resolve } from "node:path";
 import { z } from "zod";
 import { logger } from "../logger.js";
-import { getMailboxPath, getSharedDir, getSharedUserProfilePath, getVitaConfigPath, getVitaDir, getVitaHome } from "./vita-home.js";
+import { GLOBAL_TOOL_NAMES } from "../tools/catalog.js";
+import {
+  getMailboxPath,
+  getSharedDir,
+  getSharedSchedulePath,
+  getSharedUserProfilePath,
+  getVitaConfigPath,
+  getVitaDir,
+  getVitaHome,
+  getVitaSecretsPath,
+} from "./vita-home.js";
 import { vitaConfigSchema, type VitaConfig } from "./vita-registry.js";
+
+const GEMINI_PREBUILT_VOICES = [
+  "Kore",
+  "Algieba",
+  "Aoede",
+  "Charon",
+  "Fenrir",
+] as const;
 
 const sharedUserProfileSchema = z.object({
   profile: z.string().min(1),
@@ -26,21 +44,63 @@ const mailboxFileSchema = z.object({
   messages: z.array(mailboxMessageSchema).default([]),
 });
 
+const vitaSecretsSchema = z.object({
+  discordBotToken: z.string().optional(),
+});
+
+const sharedScheduleTaskSchema = z.object({
+  id: z.string(),
+  vitaName: z.string(),
+  cron: z.string(),
+  action: z.string(),
+  description: z.string().optional(),
+  enabled: z.boolean().default(true),
+  timezone: z.string().optional(),
+  tools: z.array(z.string()).optional(),
+});
+
+const sharedScheduleFileSchema = z.object({
+  tasks: z.array(sharedScheduleTaskSchema).default([]),
+  migratedLegacySchedules: z.boolean().default(false),
+});
+
 export type SharedUserProfile = z.infer<typeof sharedUserProfileSchema>;
 export type MailboxMessage = z.infer<typeof mailboxMessageSchema>;
 export type MailboxStatus = MailboxMessage["status"];
+export type VitaSecrets = z.infer<typeof vitaSecretsSchema>;
+export type SharedScheduleTask = z.infer<typeof sharedScheduleTaskSchema>;
 
 export interface SpawnCreateInput {
   name: string;
   displayName?: string;
   personality: string;
   sharedUserProfile?: string;
+  voiceName: string;
+  voicePrompt: string;
+  wakeWord: string;
+  blockedTools?: string[];
+  discord?: {
+    applicationId?: string;
+    defaultDmUserId?: string;
+    channels?: string[];
+    botToken?: string;
+  };
+}
+
+export interface DiscordPromptSummary {
+  applicationId?: string;
+  defaultDmUserId?: string;
+  channels: string[];
+  hasBotToken: boolean;
 }
 
 function ensureSharedDir(): void {
   mkdirSync(getSharedDir(), { recursive: true });
   if (!existsSync(getMailboxPath())) {
     writeFileSync(getMailboxPath(), JSON.stringify({ messages: [] }, null, 2) + "\n", "utf-8");
+  }
+  if (!existsSync(getSharedSchedulePath())) {
+    writeFileSync(getSharedSchedulePath(), JSON.stringify({ tasks: [], migratedLegacySchedules: false }, null, 2) + "\n", "utf-8");
   }
 }
 
@@ -70,9 +130,13 @@ function assertValidName(raw: string): string {
   return name;
 }
 
+function writeTextFile(path: string, content: string): void {
+  writeFileSync(path, content.trim() + "\n", "utf-8");
+}
+
 function writeTextFileIfMissing(path: string, content: string): void {
   if (!existsSync(path)) {
-    writeFileSync(path, content.trim() + "\n", "utf-8");
+    writeTextFile(path, content);
   }
 }
 
@@ -82,6 +146,33 @@ function buildSystemInstructions(displayName: string, personality: string): stri
     "Speak naturally, stay in-character, and avoid narration or theatrical stage directions.",
     `Personality:\n${personality.trim()}`,
   ].join("\n\n");
+}
+
+function normalizeWakeWord(name: string, wakeWord: string): string {
+  const trimmed = wakeWord.trim().toLowerCase().replace(/\s+/g, "_");
+  return trimmed || `hey_${name}`;
+}
+
+function getWakeWordSampleDir(name: string): string {
+  return `wakeword/refs/${name}`;
+}
+
+export function getWakeWordInstructions(name: string, wakeWord: string, sampleDir = getWakeWordSampleDir(name)): string {
+  const paths = [1, 2, 3].map((index) => `${sampleDir}/sample-${index}.wav`);
+  return [
+    `Wake phrase: ${wakeWord}`,
+    "Record at least three clear examples with LocalWake from the node machine:",
+    ...paths.map((path) => `  lwake record --duration 2 "${path}"`),
+    "Say the wake phrase naturally each time.",
+  ].join("\n");
+}
+
+function normalizeChannels(channels?: string[]): string[] {
+  return (channels ?? []).map((value) => value.trim()).filter(Boolean);
+}
+
+export function listGeminiVoices(): readonly string[] {
+  return GEMINI_PREBUILT_VOICES;
 }
 
 export function listLocalVitaNames(): string[] {
@@ -97,6 +188,16 @@ export function hasLocalVitas(): boolean {
   return listLocalVitaNames().length > 0;
 }
 
+export function writeVitaSecrets(vitaName: string, secrets: VitaSecrets): void {
+  const path = getVitaSecretsPath(vitaName);
+  const validated = vitaSecretsSchema.parse(secrets);
+  writeFileSync(path, JSON.stringify(validated, null, 2) + "\n", "utf-8");
+}
+
+export function readVitaSecrets(vitaName: string): VitaSecrets {
+  return vitaSecretsSchema.parse(readJsonFile(getVitaSecretsPath(vitaName), {}));
+}
+
 export function createLocalVita(input: SpawnCreateInput): VitaConfig {
   mkdirSync(getVitaHome(), { recursive: true });
   ensureSharedDir();
@@ -110,57 +211,32 @@ export function createLocalVita(input: SpawnCreateInput): VitaConfig {
     throw new Error(`A local VITA named '${name}' already exists.`);
   }
 
+  const wakeWord = normalizeWakeWord(name, input.wakeWord);
+  const wakeWordSampleDir = getWakeWordSampleDir(name);
   mkdirSync(dir, { recursive: true });
-
+  mkdirSync(join(dir, wakeWordSampleDir), { recursive: true });
+  const blockedTools = (input.blockedTools ?? []).filter((tool) => GLOBAL_TOOL_NAMES.includes(tool as (typeof GLOBAL_TOOL_NAMES)[number]));
   const config = vitaConfigSchema.parse({
     name,
     displayName,
     personality: input.personality.trim(),
     systemInstructions: buildSystemInstructions(displayName, input.personality),
-    voicePrompt: `Speak naturally and let your delivery reflect this personality: ${input.personality.trim()}`,
-    voiceName: "Kore",
+    voicePrompt: input.voicePrompt.trim(),
+    voiceName: input.voiceName.trim(),
     liveModel: "gemini-3.1-flash-live-preview",
     textModel: "gemini-3-flash-preview",
     heartbeatModel: "ollama/gemma3:4b",
     heartbeatOllamaUrl: "http://localhost:11434",
-    wakeWords: [`hey_${name}`],
-    tools: [
-      "read_memory",
-      "write_memory",
-      "search_memory",
-      "consolidate_memories",
-      "get_current_time",
-      "deactivate_agent",
-      "google_search",
-      "system_run",
-      "list_scripts",
-      "run_script",
-      "create_script_with_codex",
-      "system_notify",
-      "discord_notify",
-      "discord_send_file",
-      "system_list_nodes",
-      "enable_vision",
-      "enable_screenshare",
-      "disable_vision",
-      "ingest_knowledge",
-      "schedule_task",
-      "list_scheduled_tasks",
-      "remove_scheduled_task",
-      "media_play_pause",
-      "media_next_track",
-      "media_prev_track",
-      "media_volume_up",
-      "media_volume_down",
-      "list_steam_games",
-      "launch_steam_game",
-      "list_vitas",
-      "read_shared_profile",
-      "send_vita_message",
-      "read_vita_messages",
-      "mark_vita_message_read",
-    ],
-    discordChannels: [],
+    wakeWords: [wakeWord],
+    wakeWordSampleDir,
+    blockedTools,
+    tools: undefined,
+    discord: {
+      applicationId: input.discord?.applicationId?.trim() || undefined,
+      defaultDmUserId: input.discord?.defaultDmUserId?.trim() || undefined,
+      channels: normalizeChannels(input.discord?.channels),
+    },
+    discordChannels: normalizeChannels(input.discord?.channels),
     scheduledTasks: [],
   });
 
@@ -170,9 +246,14 @@ export function createLocalVita(input: SpawnCreateInput): VitaConfig {
   writeTextFileIfMissing(join(dir, "USER.md"), input.sharedUserProfile?.trim() || "Shared user profile is managed globally.");
   writeTextFileIfMissing(join(dir, "HEARTBEAT.md"), `You are ${displayName}'s lightweight heartbeat model. Reply briefly and stay aligned with the active persona.`);
   writeTextFileIfMissing(join(dir, "MEMORY.md"), `# ${displayName} Memory\n\nPrivate memories for ${displayName} live in this folder.`);
+  writeTextFile(join(dir, "WAKEWORD.md"), getWakeWordInstructions(name, wakeWord, wakeWordSampleDir));
 
   if (input.sharedUserProfile?.trim()) {
     upsertSharedUserProfile(input.sharedUserProfile.trim());
+  }
+
+  if (input.discord?.botToken?.trim()) {
+    writeVitaSecrets(name, { discordBotToken: input.discord.botToken.trim() });
   }
 
   logger.info(`[spawn] Created local VITA '${name}'`);
@@ -206,6 +287,17 @@ export function listVitaSummaries(): Array<{ name: string; displayName: string }
     const config = vitaConfigSchema.parse(readJsonFile(getVitaConfigPath(name), {}));
     return { name: config.name, displayName: config.displayName };
   });
+}
+
+export function getDiscordPromptSummary(vitaName: string): DiscordPromptSummary {
+  const config = vitaConfigSchema.parse(readJsonFile(getVitaConfigPath(vitaName), {}));
+  const secrets = readVitaSecrets(vitaName);
+  return {
+    applicationId: config.discord.applicationId,
+    defaultDmUserId: config.discord.defaultDmUserId,
+    channels: config.discord.channels,
+    hasBotToken: Boolean(secrets.discordBotToken),
+  };
 }
 
 export function formatVitaList(): string {
@@ -267,6 +359,49 @@ export function markMailboxMessageRead(vitaName: string, messageId: string): Mai
   return next;
 }
 
+export function loadSharedScheduleFile() {
+  ensureSharedDir();
+  return sharedScheduleFileSchema.parse(readJsonFile(getSharedSchedulePath(), { tasks: [], migratedLegacySchedules: false }));
+}
+
+export function saveSharedScheduleFile(data: z.infer<typeof sharedScheduleFileSchema>): void {
+  ensureSharedDir();
+  const validated = sharedScheduleFileSchema.parse(data);
+  writeFileSync(getSharedSchedulePath(), JSON.stringify(validated, null, 2) + "\n", "utf-8");
+}
+
+export function migrateLegacyScheduledTasks(vitas: VitaConfig[]): SharedScheduleTask[] {
+  const scheduleFile = loadSharedScheduleFile();
+  if (scheduleFile.migratedLegacySchedules) {
+    return scheduleFile.tasks;
+  }
+
+  const mergedTasks = [...scheduleFile.tasks];
+  for (const vita of vitas) {
+    for (const legacyTask of vita.scheduledTasks ?? []) {
+      if (mergedTasks.some((task) => task.id === legacyTask.id && task.vitaName === vita.name)) {
+        continue;
+      }
+      mergedTasks.push(sharedScheduleTaskSchema.parse({
+        id: legacyTask.id ?? `${vita.name}-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+        vitaName: vita.name,
+        cron: legacyTask.cron,
+        action: legacyTask.action,
+        description: legacyTask.description,
+        enabled: legacyTask.enabled ?? true,
+        timezone: legacyTask.timezone,
+        tools: legacyTask.tools,
+      }));
+    }
+  }
+
+  saveSharedScheduleFile({
+    tasks: mergedTasks,
+    migratedLegacySchedules: true,
+  });
+  return mergedTasks;
+}
+
 export function importExistingGraves(): VitaConfig {
   mkdirSync(getVitaHome(), { recursive: true });
   ensureSharedDir();
@@ -287,46 +422,20 @@ export function importExistingGraves(): VitaConfig {
       heartbeatModel: "ollama/gemma3:4b",
       heartbeatOllamaUrl: "http://localhost:11434",
       wakeWords: ["hey_graves"],
-      tools: [
-        "read_memory",
-        "write_memory",
-        "search_memory",
-        "consolidate_memories",
-        "get_current_time",
-        "deactivate_agent",
-        "google_search",
-        "system_run",
-        "list_scripts",
-        "run_script",
-        "create_script_with_codex",
-        "system_notify",
-        "discord_notify",
-        "discord_send_file",
-        "system_list_nodes",
-        "enable_vision",
-        "enable_screenshare",
-        "disable_vision",
-        "ingest_knowledge",
-        "schedule_task",
-        "list_scheduled_tasks",
-        "remove_scheduled_task",
-        "media_play_pause",
-        "media_next_track",
-        "media_prev_track",
-        "media_volume_up",
-        "media_volume_down",
-        "list_steam_games",
-        "launch_steam_game",
-        "list_vitas",
-        "read_shared_profile",
-        "send_vita_message",
-        "read_vita_messages",
-        "mark_vita_message_read",
-      ],
+      wakeWordSampleDir: getWakeWordSampleDir("graves"),
+      blockedTools: [],
+      discord: {
+        applicationId: process.env.DISCORD_APPLICATION_ID || undefined,
+        defaultDmUserId: process.env.DISCORD_DM_USER_ID || undefined,
+        channels: [],
+      },
       discordChannels: [],
       scheduledTasks: [],
     });
     writeFileSync(configPath, JSON.stringify(config, null, 2) + "\n", "utf-8");
+    if (process.env.DISCORD_TOKEN) {
+      writeVitaSecrets("graves", { discordBotToken: process.env.DISCORD_TOKEN });
+    }
   }
 
   const repoRoot = resolve(process.cwd(), "..");
@@ -339,6 +448,7 @@ export function importExistingGraves(): VitaConfig {
   writeTextFileIfMissing(join(dir, "IDENTITY.md"), "# Graves\n\nLegacy profile imported into local Spawn storage.");
   writeTextFileIfMissing(join(dir, "HEARTBEAT.md"), "You are Graves's heartbeat model. Reply briefly and stay aligned with the active persona.");
   writeTextFileIfMissing(join(dir, "MEMORY.md"), "# Graves Memory\n\nLegacy Graves memory remains in this folder.");
+  writeTextFileIfMissing(join(dir, "WAKEWORD.md"), getWakeWordInstructions("graves", "hey_graves", getWakeWordSampleDir("graves")));
 
   logger.info("[spawn] Imported Graves into local storage");
   return vitaConfigSchema.parse(readJsonFile(configPath, {}));

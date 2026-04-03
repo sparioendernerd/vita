@@ -13,7 +13,7 @@ import type { VitaRegistry } from "../config/vita-registry.js";
 import type { GatewayConfig } from "../config/gateway-config.js";
 import { authenticateUpgrade, authenticateHandshake, type AuthContext } from "../auth/middleware.js";
 import { isNodePaired, createPairingCode, touchPairedNode } from "../auth/token-manager.js";
-import type { DiscordBridge } from "../discord/bridge.js";
+import type { DiscordBridgeManager } from "../discord/bridge.js";
 
 export interface NodeConnection {
   id: string;
@@ -42,7 +42,7 @@ export class GatewayServer {
     geminiApiKey: string,
     config: GatewayConfig,
     gatewayToken?: string,
-    discordBridge?: DiscordBridge
+    discordBridge?: DiscordBridgeManager
   ) {
     this.config = config;
     this.gatewayToken = gatewayToken;

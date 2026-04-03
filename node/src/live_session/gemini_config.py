@@ -461,11 +461,11 @@ def build_tool_declarations(vita_config: dict) -> list[dict[str, Any]]:
         },
     }
 
-    enabled_tools = vita_config.get("tools", [])
+    blocked_tools = set(vita_config.get("blockedTools", []))
     declarations = []
-    for tool_name in enabled_tools:
-        if tool_name in tool_schemas:
-            declarations.append(tool_schemas[tool_name])
+    for tool_name, schema in tool_schemas.items():
+        if tool_name not in blocked_tools:
+            declarations.append(schema)
 
     return declarations
 
@@ -497,7 +497,7 @@ def build_live_config(vita_config: dict, memories: list[str]) -> types.LiveConne
     if tool_declarations:
         tools.append(types.Tool(function_declarations=tool_declarations))
 
-    if "google_search" in vita_config.get("tools", []):
+    if "google_search" not in set(vita_config.get("blockedTools", [])):
         tools.append(types.Tool(google_search=types.GoogleSearch()))
 
     if tools:

@@ -56,23 +56,7 @@ class VitaNode:
         # Components
         self.mic = MicStream(config)
         self.speaker = Speaker(config)
-        # Resolve wake word path relative to root if it's relative
-        ref_path = Path(config.wake_word_ref_dir)
-        if not ref_path.is_absolute():
-            # Try relative to root (VITA/)
-            root_dir = Path(__file__).resolve().parents[2]
-            ref_path = (root_dir / config.wake_word_ref_dir).resolve()
-        
-        logger.info(f"Loading wake word references from: {ref_path}")
-        
-        self.detector = WakeWordDetector(
-            str(ref_path),
-            config.wake_word_threshold,
-            config.wake_word_method,
-            config.wake_word_buffer_size,
-            config.wake_word_slide_size,
-            debug_mode=config.wake_word_debug,
-        )
+        self.detector: WakeWordDetector | None = None
         self.gateway = GatewayClient(config.gateway_url, config.node_id, config.vita_name, config.gateway_token)
         self.tool_proxy = ToolProxy(self.gateway)
         self.session_mgr = LiveSessionManager(config.gemini_api_key)
@@ -107,6 +91,7 @@ class VitaNode:
         # Connect to gateway
         self.gateway.on_command(self._handle_gateway_command)
         await self.gateway.connect()
+        await self._prepare_vita_profile()
         await self.gateway.send_status("idle")
 
         # Start the mic (single stream for everything)
@@ -118,6 +103,8 @@ class VitaNode:
 
         # Prepare detector
         self._wake_event = asyncio.Event()
+        if not self.detector:
+            raise RuntimeError("Wake word detector was not initialized")
         self.detector.start(on_detected=self._wake_event.set)
         logger.info("Wake word detector prepared — listening for wake phrase...")
 
@@ -134,19 +121,51 @@ class VitaNode:
                     logger.info("Wake word detected! Entering conversation mode...")
                     
                     # 1. Pause detector while conversing
-                    self.detector.stop()
+                    if self.detector:
+                        self.detector.stop()
                     
                     # 2. Start the Gemini conversation
                     await self._start_conversation()
 
                     # 3. Resume wake word detection
-                    self.detector.start(on_detected=self._wake_event.set)
+                    if self.detector:
+                        self.detector.start(on_detected=self._wake_event.set)
         except (KeyboardInterrupt, asyncio.CancelledError):
             logger.info("Shutting down...")
         finally:
-            self.detector.stop()
+            if self.detector:
+                self.detector.stop()
             self.mic.stop()
             await self._cleanup()
+
+    async def _prepare_vita_profile(self) -> None:
+        session_config = await self.gateway.request_session_config()
+        vita_config = session_config.get("vitaConfig") or {}
+        wake_words = vita_config.get("wakeWords") or []
+        wake_phrase = wake_words[0] if wake_words else self.config.vita_name
+        sample_dir_raw = vita_config.get("wakeWordSampleDir") or self.config.wake_word_ref_dir
+
+        ref_path = Path(sample_dir_raw)
+        if not ref_path.is_absolute():
+            root_dir = Path(__file__).resolve().parents[2]
+            ref_path = (root_dir / sample_dir_raw).resolve()
+        ref_path.mkdir(parents=True, exist_ok=True)
+
+        logger.info(f"Wake phrase: {wake_phrase}")
+        logger.info(f"Wake word references: {ref_path}")
+        sample_one = ref_path / "sample-1.wav"
+        if not any(ref_path.glob("*.wav")):
+            logger.warning("No LocalWake samples found for this VITA.")
+            logger.warning(f"Record examples with: lwake record --duration 2 \"{sample_one}\"")
+
+        self.detector = WakeWordDetector(
+            str(ref_path),
+            self.config.wake_word_threshold,
+            self.config.wake_word_method,
+            self.config.wake_word_buffer_size,
+            self.config.wake_word_slide_size,
+            debug_mode=self.config.wake_word_debug,
+        )
 
     async def _start_conversation(self) -> None:
         """Transition from IDLE to CONVERSING."""

@@ -23,10 +23,12 @@ import { makeTextModelFn } from "../gemini/text-client.js";
 import type { GatewayServer } from "../websocket/server.js";
 import type { GatewayConfig } from "../config/gateway-config.js";
 import { getVitaDir } from "../config/vita-home.js";
-import { listVitaSummaries, markMailboxMessageRead, readMailboxMessages, readSharedUserProfile, sendMailboxMessage } from "../config/spawn-storage.js";
+import { listVitaSummaries, markMailboxMessageRead, readMailboxMessages, readSharedUserProfile, readVitaSecrets, sendMailboxMessage } from "../config/spawn-storage.js";
+import { getAvailableToolNames, isToolBlocked } from "../tools/catalog.js";
 
 interface DiscordBridgeOptions {
   token: string;
+  vitaName: string;
   applicationId?: string;
   defaultDmUserId?: string;
   geminiApiKey: string;
@@ -64,7 +66,7 @@ const NODE_LOCAL_TOOLS = new Set([
 
 type SessionKey = `${string}:${string}`;
 
-export class DiscordBridge {
+class DiscordBridgeInstance {
   private readonly client: Client;
   private readonly genai: GoogleGenAI;
   private readonly geminiApiKey: string;
@@ -73,6 +75,7 @@ export class DiscordBridge {
   private readonly lastDmUsers = new Map<string, string>();
   private readonly inFlight = new Set<SessionKey>();
   private readonly token: string;
+  private readonly vitaName: string;
   private readonly applicationId?: string;
   private readonly defaultDmUserId?: string;
   private gatewayServer?: GatewayServer;
@@ -81,6 +84,7 @@ export class DiscordBridge {
 
   constructor(options: DiscordBridgeOptions) {
     this.token = options.token;
+    this.vitaName = options.vitaName;
     this.applicationId = options.applicationId;
     this.defaultDmUserId = options.defaultDmUserId;
     this.geminiApiKey = options.geminiApiKey;
@@ -100,7 +104,7 @@ export class DiscordBridge {
   async start(): Promise<void> {
     this.client.once("ready", () => {
       this.ready = true;
-      logger.info(`[discord] Connected as ${this.client.user?.tag ?? "unknown user"}`);
+      logger.info(`[discord] Connected ${this.vitaName} as ${this.client.user?.tag ?? "unknown user"}`);
     });
 
     this.client.on("messageCreate", (message) => {
@@ -131,6 +135,9 @@ export class DiscordBridge {
     vitaName: string,
     payload: { title: string; body: string }
   ): Promise<{ success: boolean; sent: number; error?: string }> {
+    if (vitaName !== this.vitaName) {
+      return { success: false, sent: 0, error: `${this.vitaName} cannot send for ${vitaName}` };
+    }
     const vita = this.vitaRegistry.get(vitaName);
     if (!vita) {
       return { success: false, sent: 0, error: `Unknown VITA: ${vitaName}` };
@@ -149,7 +156,8 @@ export class DiscordBridge {
       }
     }
 
-    if (!vita.discordChannels.length) {
+    const channelIds = vita.discord.channels.length ? vita.discord.channels : vita.discordChannels;
+    if (!channelIds.length) {
       if (!sent) {
         return {
           success: false,
@@ -161,7 +169,7 @@ export class DiscordBridge {
       return { success: true, sent };
     }
 
-    for (const channelId of vita.discordChannels) {
+    for (const channelId of channelIds) {
       const channel = await this.fetchChannel(channelId);
       if (!channel) {
         logger.warn(`[discord] Could not fetch configured channel ${channelId} for ${vitaName}`);
@@ -188,6 +196,9 @@ export class DiscordBridge {
     payload: DiscordFilePayload,
     options?: { channelId?: string }
   ): Promise<{ success: boolean; sent: number; error?: string; filename?: string }> {
+    if (vitaName !== this.vitaName) {
+      return { success: false, sent: 0, error: `${this.vitaName} cannot send for ${vitaName}` };
+    }
     const vita = this.vitaRegistry.get(vitaName);
     if (!vita) {
       return { success: false, sent: 0, error: `Unknown VITA: ${vitaName}` };
@@ -235,7 +246,8 @@ export class DiscordBridge {
       }
     }
 
-    for (const channelId of vita.discordChannels) {
+    const channelIds = vita.discord.channels.length ? vita.discord.channels : vita.discordChannels;
+    for (const channelId of channelIds) {
       const channel = await this.fetchChannel(channelId);
       if (!channel || !this.canSend(channel)) {
         continue;
@@ -288,25 +300,18 @@ export class DiscordBridge {
   }
 
   private resolveVitaForMessage(message: Message): VitaConfig | undefined {
-    const allVitas = this.vitaRegistry.getAll().filter((vita) =>
-      vita.discordChannels.includes(message.channelId)
-    );
-
-    if (allVitas.length === 1) {
-      return allVitas[0];
+    const target = this.vitaRegistry.get(this.vitaName);
+    if (!target) {
+      return undefined;
     }
-
-    if (allVitas.length > 1) {
-      logger.warn(`[discord] Multiple VITAs mapped to channel ${message.channelId}; using first match`);
-      return allVitas[0];
+    const targetChannels = target.discord.channels.length ? target.discord.channels : target.discordChannels;
+    if (targetChannels.includes(message.channelId)) {
+      return target;
     }
 
     if (message.channel.type === ChannelType.DM) {
-      const vita = this.vitaRegistry.getFirst();
-      if (vita) {
-        this.lastDmUsers.set(vita.name, message.author.id);
-      }
-      return vita;
+      this.lastDmUsers.set(target.name, message.author.id);
+      return target;
     }
 
     return undefined;
@@ -784,7 +789,7 @@ export class DiscordBridge {
       },
     };
 
-    return vita.tools
+    return getAvailableToolNames(vita)
       .filter((toolName) => declarations[toolName])
       .map((toolName) => declarations[toolName]);
   }
@@ -799,6 +804,9 @@ export class DiscordBridge {
     const store = getMemoryStore(vita.name, this.geminiApiKey);
 
     try {
+      if (isToolBlocked(vita, toolName)) {
+        return { error: `Tool '${toolName}' is blocked for ${vita.displayName}.` };
+      }
       if (toolName === "get_current_time") {
         const now = new Date();
         return {
@@ -1009,7 +1017,7 @@ export class DiscordBridge {
   }
 
   private getDmTargetUserId(vita: VitaConfig): string | undefined {
-    return this.defaultDmUserId?.trim() || this.lastDmUsers.get(vita.name);
+    return vita.discord.defaultDmUserId?.trim() || this.defaultDmUserId?.trim() || this.lastDmUsers.get(vita.name);
   }
 
   private pickNodeForVita(vitaName: string) {
@@ -1170,4 +1178,106 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 function appendLimited(current: string, next: string, maxLength = 4000): string {
   const combined = current + next;
   return combined.length > maxLength ? combined.slice(-maxLength) : combined;
+}
+
+export class DiscordBridgeManager {
+  private readonly bridges = new Map<string, DiscordBridgeInstance>();
+  private gatewayServer?: GatewayServer;
+  private gatewayConfig?: GatewayConfig;
+  private unsubscribe?: () => void;
+
+  constructor(
+    private readonly options: {
+      geminiApiKey: string;
+      vitaRegistry: VitaRegistry;
+    }
+  ) {}
+
+  async start(): Promise<void> {
+    await this.syncBridges();
+    this.unsubscribe = this.options.vitaRegistry.onChange(() => {
+      void this.syncBridges();
+    });
+  }
+
+  private async syncBridges(): Promise<void> {
+    const vitas = this.options.vitaRegistry.getAll();
+    const validNames = new Set(vitas.map((vita) => vita.name));
+
+    for (const [vitaName, bridge] of this.bridges.entries()) {
+      if (!validNames.has(vitaName)) {
+        await bridge.stop();
+        this.bridges.delete(vitaName);
+      }
+    }
+
+    for (const vita of vitas) {
+      const secrets = readVitaSecrets(vita.name);
+      const legacyToken = this.options.vitaRegistry.getAll().length === 1 ? process.env.DISCORD_TOKEN : undefined;
+      const token = secrets.discordBotToken?.trim() || legacyToken?.trim();
+      const existing = this.bridges.get(vita.name);
+      if (!token) {
+        if (existing) {
+          await existing.stop();
+          this.bridges.delete(vita.name);
+        }
+        continue;
+      }
+      if (existing) {
+        continue;
+      }
+      const bridge = new DiscordBridgeInstance({
+        token,
+        vitaName: vita.name,
+        applicationId: vita.discord.applicationId || process.env.DISCORD_APPLICATION_ID,
+        defaultDmUserId: vita.discord.defaultDmUserId || process.env.DISCORD_DM_USER_ID,
+        geminiApiKey: this.options.geminiApiKey,
+        vitaRegistry: this.options.vitaRegistry,
+      });
+      if (this.gatewayServer && this.gatewayConfig) {
+        bridge.attachGateway(this.gatewayServer, this.gatewayConfig);
+      }
+      await bridge.start();
+      this.bridges.set(vita.name, bridge);
+    }
+  }
+
+  attachGateway(server: GatewayServer, config: GatewayConfig): void {
+    this.gatewayServer = server;
+    this.gatewayConfig = config;
+    for (const bridge of this.bridges.values()) {
+      bridge.attachGateway(server, config);
+    }
+  }
+
+  async stop(): Promise<void> {
+    this.unsubscribe?.();
+    this.unsubscribe = undefined;
+    await Promise.all(Array.from(this.bridges.values(), (bridge) => bridge.stop()));
+    this.bridges.clear();
+  }
+
+  async notifyVita(vitaName: string, payload: { title: string; body: string }) {
+    const bridge = this.bridges.get(vitaName);
+    if (!bridge) {
+      return { success: false, sent: 0, error: `No Discord bot configured for ${vitaName}` };
+    }
+    return bridge.notifyVita(vitaName, payload);
+  }
+
+  async sendFileToVita(
+    vitaName: string,
+    payload: DiscordFilePayload,
+    options?: { channelId?: string }
+  ) {
+    const bridge = this.bridges.get(vitaName);
+    if (!bridge) {
+      return { success: false, sent: 0, error: `No Discord bot configured for ${vitaName}` };
+    }
+    return bridge.sendFileToVita(vitaName, payload, options);
+  }
+
+  hasAnyConfiguredBots(): boolean {
+    return this.bridges.size > 0;
+  }
 }

@@ -11,12 +11,26 @@ import {
   markMailboxMessageRead,
   readMailboxMessages,
   readSharedUserProfile,
+  readVitaSecrets,
   sendMailboxMessage,
+  loadSharedScheduleFile,
 } from "../dist/config/spawn-storage.js";
 import { getVitaConfigPath, getVitaDir } from "../dist/config/vita-home.js";
 import { VitaRegistry } from "../dist/config/vita-registry.js";
 import { ensureSpawnInitialized } from "../dist/config/startup-check.js";
 import { closeAllMemoryStores, getMemoryStore } from "../dist/memory/index.js";
+import { addScheduledTask, listScheduledTasks, removeScheduledTask } from "../dist/scheduler/store.js";
+
+function spawnInput(name, personality, extra = {}) {
+  return {
+    name,
+    personality,
+    voiceName: "Kore",
+    voicePrompt: `Voice prompt for ${name}`,
+    wakeWord: `hey ${name}`,
+    ...extra,
+  };
+}
 
 async function withTempHome(name, fn) {
   const previous = process.env.VITA_HOME;
@@ -43,35 +57,37 @@ async function withTempHome(name, fn) {
 
 await withTempHome("spawn-init", (home) => {
   const vita = createLocalVita({
-    name: "iris",
-    personality: "Dry and observant.",
+    ...spawnInput("iris", "Dry and observant."),
     sharedUserProfile: "Mr Vailen likes direct technical answers.",
+    discord: {
+      applicationId: "app-1",
+      defaultDmUserId: "user-1",
+      channels: ["123"],
+      botToken: "secret-token",
+    },
   });
   assert.equal(vita.name, "iris");
   assert.equal(hasLocalVitas(), true);
   assert.equal(readSharedUserProfile()?.profile, "Mr Vailen likes direct technical answers.");
   assert.equal(existsSync(getVitaConfigPath("iris")), true);
   assert.equal(existsSync(join(getVitaDir("iris"), "IDENTITY.md")), true);
+  assert.equal(vita.voiceName, "Kore");
+  assert.deepEqual(vita.wakeWords, ["hey_iris"]);
+  assert.equal(vita.blockedTools.length, 0);
+  assert.equal(readVitaSecrets("iris").discordBotToken, "secret-token");
   assert.equal(existsSync(join(home, "shared", "mailbox.json")), true);
 });
 
 await withTempHome("spawn-create", () => {
-  createLocalVita({
-    name: "iris",
-    personality: "Dry and observant.",
-    sharedUserProfile: "Shared profile text.",
-  });
-  createLocalVita({
-    name: "ember",
-    personality: "Brisk and curious.",
-  });
+  createLocalVita({ ...spawnInput("iris", "Dry and observant."), sharedUserProfile: "Shared profile text." });
+  createLocalVita({ ...spawnInput("ember", "Brisk and curious.") });
   assert.equal(listVitaSummaries().length, 2);
   assert.equal(readSharedUserProfile()?.profile, "Shared profile text.");
 });
 
 await withTempHome("registry", () => {
-  createLocalVita({ name: "iris", personality: "Dry.", sharedUserProfile: "Shared." });
-  createLocalVita({ name: "ember", personality: "Brisk." });
+  createLocalVita({ ...spawnInput("iris", "Dry."), sharedUserProfile: "Shared." });
+  createLocalVita({ ...spawnInput("ember", "Brisk.") });
   const registry = new VitaRegistry();
   registry.load();
   assert.deepEqual(
@@ -81,8 +97,8 @@ await withTempHome("registry", () => {
 });
 
 await withTempHome("memory-isolation", () => {
-  createLocalVita({ name: "alpha", personality: "Calm.", sharedUserProfile: "Shared profile." });
-  createLocalVita({ name: "beta", personality: "Sharp." });
+  createLocalVita({ ...spawnInput("alpha", "Calm."), sharedUserProfile: "Shared profile." });
+  createLocalVita({ ...spawnInput("beta", "Sharp.") });
   const alphaStore = getMemoryStore("alpha");
   const betaStore = getMemoryStore("beta");
   alphaStore.writeMemory("alpha", "conversations", "Alpha secret", ["test"]);
@@ -92,8 +108,8 @@ await withTempHome("memory-isolation", () => {
 });
 
 await withTempHome("mailbox", () => {
-  createLocalVita({ name: "alpha", personality: "Calm.", sharedUserProfile: "Shared profile." });
-  createLocalVita({ name: "beta", personality: "Sharp." });
+  createLocalVita({ ...spawnInput("alpha", "Calm."), sharedUserProfile: "Shared profile." });
+  createLocalVita({ ...spawnInput("beta", "Sharp.") });
   const sent = sendMailboxMessage({
     fromVita: "alpha",
     toVita: "beta",
@@ -108,6 +124,22 @@ await withTempHome("mailbox", () => {
   const readMessages = readMailboxMessages("beta", "read");
   assert.equal(readMessages.length, 1);
   assert.equal(readMessages[0].id, sent.id);
+});
+
+await withTempHome("shared-schedule", () => {
+  createLocalVita({ ...spawnInput("alpha", "Calm."), sharedUserProfile: "Shared profile." });
+  createLocalVita({ ...spawnInput("beta", "Sharp.") });
+  const registry = new VitaRegistry();
+  registry.load();
+  const task = addScheduledTask(registry, "alpha", {
+    cron: "0 9 * * *",
+    action: "Check the morning queue.",
+    description: "Morning check",
+  });
+  assert.equal(listScheduledTasks(registry, "alpha").length, 1);
+  assert.equal(loadSharedScheduleFile().tasks.length, 1);
+  assert.equal(removeScheduledTask(registry, "alpha", task.id), true);
+  assert.equal(listScheduledTasks(registry, "alpha").length, 0);
 });
 
 await withTempHome("graves-migration", (home) => {
