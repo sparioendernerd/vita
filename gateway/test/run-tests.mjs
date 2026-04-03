@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -14,6 +14,7 @@ import {
   readVitaSecrets,
   sendMailboxMessage,
   loadSharedScheduleFile,
+  migrateLocalVitaConfig,
 } from "../dist/config/spawn-storage.js";
 import { getVitaConfigPath, getVitaDir } from "../dist/config/vita-home.js";
 import { VitaRegistry } from "../dist/config/vita-registry.js";
@@ -167,6 +168,25 @@ await withTempHome("graves-migration", (home) => {
   assert.equal(memories[0].content, "Legacy Graves memory");
   assert.equal(existsSync(join(gravesDir, "memories.json")), true);
   assert.equal(existsSync(join(gravesDir, ".migrated_v2")), true);
+});
+
+await withTempHome("config-migration", () => {
+  createLocalVita({ ...spawnInput("graves", "Dry."), sharedUserProfile: "Shared." });
+  const legacyPath = getVitaConfigPath("graves");
+  const legacy = JSON.parse(readFileSync(legacyPath, "utf-8"));
+  delete legacy.blockedTools;
+  delete legacy.discord;
+  delete legacy.wakeWordSampleDir;
+  legacy.tools = ["read_memory", "write_memory"];
+  legacy.discordChannels = ["999"];
+  writeFileSync(legacyPath, JSON.stringify(legacy, null, 2) + "\n", "utf-8");
+
+  const migrated = migrateLocalVitaConfig("graves");
+  assert.equal(migrated.name, "graves");
+  assert.equal(migrated.wakeWordSampleDir, "wakeword/refs/graves");
+  assert.equal(migrated.discord.channels[0], "999");
+  assert.equal(migrated.blockedTools.includes("read_memory"), false);
+  assert.equal(migrated.blockedTools.includes("search_memory"), true);
 });
 
 await withTempHome("startup-guard", (home) => {

@@ -32,6 +32,7 @@ import {
   createLocalVita,
   formatVitaList,
   getDiscordPromptSummary,
+  migrateLocalVitaConfig,
   getWakeWordInstructions,
   hasLocalVitas,
   importExistingGraves,
@@ -62,6 +63,7 @@ Commands:
   spawn create                    Create an additional local VITA
   spawn list                      List local VITAs
   spawn import-graves             Import legacy Graves into local storage
+  spawn migrate-config <name>     Rewrite an existing local VITA config to the current format
 `);
 }
 
@@ -165,6 +167,19 @@ async function main() {
       if (subcommand === "import-graves") {
         const vita = importExistingGraves();
         console.log(`Imported ${vita.displayName} (${vita.name}) into local storage.`);
+        console.log("");
+        console.log(getWakeWordInstructions(vita.name, vita.wakeWords[0], vita.wakeWordSampleDir));
+        return;
+      }
+
+      if (subcommand === "migrate-config") {
+        const vitaName = args[2];
+        if (!vitaName) {
+          console.error("Usage: spawn migrate-config <vita-name>");
+          process.exit(1);
+        }
+        const vita = migrateLocalVitaConfig(vitaName);
+        console.log(`Migrated config for ${vita.displayName} (${vita.name}).`);
         console.log("");
         console.log(getWakeWordInstructions(vita.name, vita.wakeWords[0], vita.wakeWordSampleDir));
         return;

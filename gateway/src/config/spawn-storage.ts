@@ -2,7 +2,7 @@ import { copyFileSync, existsSync, mkdirSync, readFileSync, readdirSync, writeFi
 import { join, resolve } from "node:path";
 import { z } from "zod";
 import { logger } from "../logger.js";
-import { GLOBAL_TOOL_NAMES } from "../tools/catalog.js";
+import { GLOBAL_TOOL_NAMES, normalizeBlockedTools } from "../tools/catalog.js";
 import {
   getMailboxPath,
   getSharedDir,
@@ -298,6 +298,60 @@ export function getDiscordPromptSummary(vitaName: string): DiscordPromptSummary 
     channels: config.discord.channels,
     hasBotToken: Boolean(secrets.discordBotToken),
   };
+}
+
+export function migrateLocalVitaConfig(vitaName: string): VitaConfig {
+  ensureSharedDir();
+  const normalizedName = assertValidName(vitaName);
+  const configPath = getVitaConfigPath(normalizedName);
+  if (!existsSync(configPath)) {
+    throw new Error(`No local VITA config found for '${normalizedName}'.`);
+  }
+
+  const raw = readJsonFile<Record<string, unknown>>(configPath, {});
+  const displayName = typeof raw.displayName === "string" && raw.displayName.trim()
+    ? raw.displayName.trim()
+    : displayNameFor(normalizedName);
+  const wakeWords = Array.isArray(raw.wakeWords) && raw.wakeWords.length > 0
+    ? raw.wakeWords.map(String).filter(Boolean)
+    : [normalizeWakeWord(normalizedName, `hey ${normalizedName}`)];
+  const wakeWordSampleDir = typeof raw.wakeWordSampleDir === "string" && raw.wakeWordSampleDir.trim()
+    ? raw.wakeWordSampleDir.trim()
+    : getWakeWordSampleDir(normalizedName);
+  const discordChannels = Array.isArray(raw.discordChannels) ? raw.discordChannels.map(String) : [];
+  const discordRaw = typeof raw.discord === "object" && raw.discord !== null ? raw.discord as Record<string, unknown> : {};
+
+  const migrated = vitaConfigSchema.parse({
+    ...raw,
+    name: normalizedName,
+    displayName,
+    personality: typeof raw.personality === "string" ? raw.personality : "",
+    systemInstructions: typeof raw.systemInstructions === "string" ? raw.systemInstructions : "",
+    voiceName: typeof raw.voiceName === "string" && raw.voiceName.trim() ? raw.voiceName : "Algieba",
+    voicePrompt: typeof raw.voicePrompt === "string" && raw.voicePrompt.trim()
+      ? raw.voicePrompt
+      : `Speak as ${displayName} with a clear, distinctive voice.`,
+    wakeWords,
+    wakeWordSampleDir,
+    blockedTools: normalizeBlockedTools({
+      tools: Array.isArray(raw.tools) ? raw.tools.map(String) : undefined,
+      blockedTools: Array.isArray(raw.blockedTools) ? raw.blockedTools.map(String) : [],
+    }),
+    discord: {
+      applicationId: typeof discordRaw.applicationId === "string" ? discordRaw.applicationId : undefined,
+      defaultDmUserId: typeof discordRaw.defaultDmUserId === "string" ? discordRaw.defaultDmUserId : undefined,
+      channels: normalizeChannels(
+        Array.isArray(discordRaw.channels) ? discordRaw.channels.map(String) : discordChannels
+      ),
+    },
+    discordChannels: normalizeChannels(discordChannels),
+    scheduledTasks: Array.isArray(raw.scheduledTasks) ? raw.scheduledTasks : [],
+  });
+
+  writeFileSync(configPath, JSON.stringify(migrated, null, 2) + "\n", "utf-8");
+  writeTextFileIfMissing(join(getVitaDir(normalizedName), "WAKEWORD.md"), getWakeWordInstructions(normalizedName, migrated.wakeWords[0], migrated.wakeWordSampleDir));
+  logger.info(`[spawn] Migrated local VITA config '${normalizedName}' to the current format`);
+  return migrated;
 }
 
 export function formatVitaList(): string {
