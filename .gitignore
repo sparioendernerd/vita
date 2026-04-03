@@ -28,6 +28,7 @@ node/src/wakeword/models/*.tflite
 # Wake word reference recordings (user-specific voice samples)
 node/src/wakeword/refs/*.wav
 !node/src/wakeword/refs/.gitkeep
+wakeword/refs/
 
 # Memory data (runtime generated)
 gateway/data/memory/**/*.json
