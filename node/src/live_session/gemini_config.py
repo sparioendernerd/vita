@@ -37,6 +37,10 @@ def build_system_prompt(vita_config: dict, memories: list[str]) -> str:
         if vita_lines:
             parts.append("## Other Known VITAs\n" + "\n".join(vita_lines))
 
+    available_tools = vita_config.get("availableTools") or []
+    if available_tools:
+        parts.append("## Available Tools\n" + ", ".join(str(tool) for tool in available_tools))
+
     # Add tool instructions
     parts.append(
         "## Core Rule: Deactivation\n"
@@ -59,6 +63,15 @@ def build_system_prompt(vita_config: dict, memories: list[str]) -> str:
         "If Mr Vailen asks for a complex, multi-step, or long-running task that does not need to finish inside this live exchange, prefer `start_background_task`.\n"
         "When you do that, briefly confirm that you'll handle it and report back when it's done.\n"
         "Use recurring `schedule_task` only for repeated jobs. Use `start_background_task` for one-off async work."
+    )
+    parts.append(
+        "## Core Rule: Tool Discipline\n"
+        "If a dedicated tool exists for the job, use the tool instead of improvising with `system_run`.\n"
+        "Do NOT try shell commands like `which schedule_task`, `crontab`, or similar to access tools. Tools are called directly by name, not through the terminal.\n"
+        "Use `schedule_task` for recurring schedules, one distinct tool call per schedule entry.\n"
+        "Use `start_background_task` for one-off complex jobs that need several steps or follow-up.\n"
+        "Use `run_script` only for scripts already registered in the gateway. Use `list_scripts` first if you're unsure what exists.\n"
+        "Use `system_run` only when there is no dedicated tool for the task."
     )
 
     return "\n\n".join(parts)

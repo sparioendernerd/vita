@@ -25,7 +25,7 @@ import type { GatewayConfig } from "../config/gateway-config.js";
 import type { DiscordBridgeManager } from "../discord/bridge.js";
 import { addScheduledTask, listScheduledTasks, removeScheduledTask } from "../scheduler/task-config.js";
 import { listVitaSummaries, markMailboxMessageRead, readMailboxMessages, readSharedUserProfile, sendMailboxMessage } from "../config/spawn-storage.js";
-import { isToolBlocked } from "../tools/catalog.js";
+import { getAvailableToolNames, isToolBlocked } from "../tools/catalog.js";
 import { cancelBackgroundTask, getBackgroundTask, listBackgroundTasks, startBackgroundTask } from "../background/store.js";
 
 export type MessageHandler = (node: NodeConnection, msg: ProtocolMessage) => void;
@@ -75,6 +75,7 @@ export function createHandlers(
             ...vita,
             sharedUserProfile: sharedProfile?.profile,
             knownVitas,
+            availableTools: getAvailableToolNames(vita),
           },
           memories,
           sharedUserProfile: sharedProfile?.profile,

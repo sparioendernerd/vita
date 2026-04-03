@@ -404,6 +404,11 @@ class DiscordBridgeInstance {
       parts.push(`Relevant memories:\n${memories.map((memory) => `- ${memory}`).join("\n")}`);
     }
 
+    const availableTools = getAvailableToolNames(vita);
+    if (availableTools.length) {
+      parts.push(`Available tools:\n${availableTools.map((tool) => `- ${tool}`).join("\n")}`);
+    }
+
     parts.push(
       "Mode: You are replying over Discord text, not voice. Keep responses concise and natural for chat."
     );
@@ -428,6 +433,12 @@ class DiscordBridgeInstance {
     parts.push(
       "If a request is complex, multi-step, or likely to take more than a short burst of tool use, prefer `start_background_task`." +
       " Tell Mr Vailen you'll get on it and report back when the task is done."
+    );
+    parts.push(
+      "Tool discipline: if a dedicated tool exists, use it instead of improvising with `system_run`." +
+      " Do not try shell commands like `which schedule_task`, `crontab`, or similar to access tools." +
+      " Use `schedule_task` for recurring schedules, one schedule entry per tool call." +
+      " Use `list_scripts` before `run_script` if you are unsure what scripts exist."
     );
 
     return parts.join("\n\n");
