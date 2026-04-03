@@ -39,6 +39,7 @@ import {
   listGeminiVoices,
   listVitaSummaries,
   readSharedUserProfile,
+  writeVitaSecrets,
 } from "./config/spawn-storage.js";
 
 const args = process.argv.slice(2);
@@ -64,6 +65,7 @@ Commands:
   spawn list                      List local VITAs
   spawn import-graves             Import legacy Graves into local storage
   spawn migrate-config <name>     Rewrite an existing local VITA config to the current format
+  spawn set-discord-token <name>  Store or replace a per-VITA Discord bot token
 `);
 }
 
@@ -109,6 +111,19 @@ async function promptForSpawn(options: { requireSharedProfile: boolean }) {
     }
 
     return { name, personality, sharedUserProfile, voiceName, voicePrompt, wakeWord, discord };
+  } finally {
+    rl.close();
+  }
+}
+
+async function promptForDiscordToken(vitaName: string): Promise<string> {
+  const rl = createInterface({ input, output });
+  try {
+    const token = (await rl.question(`Discord bot token for ${vitaName}: `)).trim();
+    if (!token) {
+      throw new Error("Discord bot token is required.");
+    }
+    return token;
   } finally {
     rl.close();
   }
@@ -182,6 +197,18 @@ async function main() {
         console.log(`Migrated config for ${vita.displayName} (${vita.name}).`);
         console.log("");
         console.log(getWakeWordInstructions(vita.name, vita.wakeWords[0], vita.wakeWordSampleDir));
+        return;
+      }
+
+      if (subcommand === "set-discord-token") {
+        const vitaName = args[2];
+        if (!vitaName) {
+          console.error("Usage: spawn set-discord-token <vita-name>");
+          process.exit(1);
+        }
+        const token = await promptForDiscordToken(vitaName);
+        writeVitaSecrets(vitaName, { discordBotToken: token });
+        console.log(`Stored Discord bot token for ${vitaName}.`);
         return;
       }
 
