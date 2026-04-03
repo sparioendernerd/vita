@@ -1,9 +1,7 @@
 import { mkdirSync, appendFileSync } from "node:fs";
 import { join } from "node:path";
-import { homedir } from "node:os";
 import { logger } from "../logger.js";
-
-const VITA_HOME = join(homedir(), ".vita");
+import { getVitaDir } from "../config/vita-home.js";
 
 export interface TranscriptEntry {
   timestamp: string;
@@ -22,7 +20,7 @@ export function appendTranscript(
   entry: TranscriptEntry
 ): void {
   const date = new Date().toISOString().split("T")[0]; // YYYY-MM-DD
-  const dir = join(VITA_HOME, vitaName, "sessions", date);
+  const dir = join(getVitaDir(vitaName), "sessions", date);
 
   try {
     mkdirSync(dir, { recursive: true });

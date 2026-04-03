@@ -651,6 +651,10 @@ async def main():
         logger.error(f"GEMINI_API_KEY not set (Checked ENV and {env_path})")
         sys.exit(1)
 
+    if not config.vita_name:
+        logger.error("VITA_NAME is not set. Create or choose a local VITA, then set VITA_NAME before starting the node.")
+        sys.exit(1)
+
     logger.info(f"Starting VITA Node {config.node_id} (vita={config.vita_name})")
     logger.info(f"Gateway: {config.gateway_url}")
 

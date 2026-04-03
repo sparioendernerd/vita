@@ -27,7 +27,18 @@ VITA is a modular, personality-driven assistant with a split Gateway/Node archit
 cd gateway
 npm install
 npm run build
+npm run cli -- spawn init
 npm start
+```
+
+The gateway now loads VITAs from local Spawn-managed folders under `~/.vita/<vita-name>`. The repo no longer ships a default Graves runtime config. On a fresh setup, create your first VITA with `npm run cli -- spawn init` before starting the gateway.
+
+Useful Spawn commands:
+
+```bash
+npm run cli -- spawn list
+npm run cli -- spawn create
+npm run cli -- spawn import-graves
 ```
 
 Check `~/.vita/gateway-token` for the generated gateway token if you use token auth.
@@ -44,16 +55,16 @@ Check `~/.vita/gateway-token` for the generated gateway token if you use token a
 2. Enable the `Message Content Intent`.
 3. Put the bot token in `DISCORD_TOKEN` and the app ID in `DISCORD_APPLICATION_ID`.
 4. Invite the bot to your server.
-5. Optional: add one or more Discord channel IDs to the target VITA config in `gateway/data/vitas/default.vita.json` if you want server-channel replies.
+5. Optional: add one or more Discord channel IDs to the target local VITA config in `~/.vita/<vita-name>/config.json` if you want server-channel replies.
 6. Set `DISCORD_DM_USER_ID` in `.env` if you want `discord_notify` to DM a fixed Discord account.
 
 Example:
 
 ```json
 {
-  "name": "graves",
+  "name": "your_vita",
   "discordChannels": ["123456789012345678"],
-  "tools": ["system_notify", "discord_notify"]
+  "tools": ["system_notify", "discord_notify", "list_vitas", "send_vita_message"]
 }
 ```
 
@@ -80,7 +91,7 @@ Example:
 
 You can also create, list, and remove these tasks from VITA itself through the `schedule_task`, `list_scheduled_tasks`, and `remove_scheduled_task` tools.
 
-DMs to the bot are routed to the first loaded VITA automatically. Outbound `discord_notify` will prefer `DISCORD_DM_USER_ID`, and if that is not set it will fall back to the last user who DM'd that VITA.
+DMs to the bot are routed to the first loaded local VITA automatically. Outbound `discord_notify` will prefer `DISCORD_DM_USER_ID`, and if that is not set it will fall back to the last user who DM'd that VITA.
 
 ## Scripts System
 

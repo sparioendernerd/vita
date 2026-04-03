@@ -10,7 +10,8 @@
     "cli": "tsx src/cli.ts",
     "doctor": "tsx src/cli.ts doctor",
     "token": "tsx src/cli.ts token",
-    "pairing": "tsx src/cli.ts pairing"
+    "pairing": "tsx src/cli.ts pairing",
+    "test": "tsc && node test/run-tests.mjs"
   },
   "dependencies": {
     "@google/genai": "^1.47.0",

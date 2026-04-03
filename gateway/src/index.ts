@@ -8,6 +8,7 @@ import {
   type GatewayConfig,
 } from "./config/gateway-config.js";
 import { VitaRegistry } from "./config/vita-registry.js";
+import { ensureSpawnInitialized, getSpawnInitInstruction } from "./config/startup-check.js";
 import { GatewayServer } from "./websocket/server.js";
 import { loadOrCreateToken } from "./auth/token-manager.js";
 import { setupTailscale, teardownTailscale } from "./network/tailscale.js";
@@ -85,9 +86,15 @@ async function main() {
   }
 
   // ── Load VITA configs ───────────────────────────────────────────────────
-  const vitasDir = resolve(__dirname, "../data/vitas");
-  const vitaRegistry = new VitaRegistry(vitasDir);
+  const vitaRegistry = new VitaRegistry();
   vitaRegistry.load();
+  try {
+    ensureSpawnInitialized();
+  } catch (err) {
+    logger.error("No local VITAs found.");
+    logger.error(getSpawnInitInstruction());
+    process.exit(1);
+  }
   vitaRegistry.watchForChanges();
 
   let discordBridge: DiscordBridge | undefined;

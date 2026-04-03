@@ -1,8 +1,8 @@
 import { readFileSync, writeFileSync, existsSync } from "node:fs";
 import { join } from "node:path";
-import { homedir } from "node:os";
 import { logger } from "../logger.js";
 import type { MemoryStore } from "./store.js";
+import { getVitaDir } from "../config/vita-home.js";
 
 interface LegacyMemory {
   id: string;
@@ -15,7 +15,7 @@ interface LegacyMemory {
 type LegacyMemoryStoreData = Record<string, LegacyMemory[]>;
 
 export function migrateIfNeeded(vitaName: string, store: MemoryStore): void {
-  const dir = join(homedir(), ".vita", vitaName);
+  const dir = getVitaDir(vitaName);
   const jsonPath = join(dir, "memories.json");
   const doneFlagPath = join(dir, ".migrated_v2");
 

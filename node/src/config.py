@@ -6,7 +6,7 @@ class NodeConfig(BaseModel):
     gateway_url: str = Field(default="ws://localhost:8765")
     gateway_token: str = Field(default="")  # auth token for the gateway
     node_id: str = Field(default="")
-    vita_name: str = Field(default="graves")
+    vita_name: str = Field(default="")
     gemini_api_key: str = Field(default="")
 
     # Audio settings
@@ -47,7 +47,7 @@ def load_config() -> NodeConfig:
         gateway_url=os.getenv("GATEWAY_URL", default_url),
         gateway_token=os.getenv("VITA_GATEWAY_TOKEN", ""),
         node_id=os.getenv("NODE_ID", ""),
-        vita_name=os.getenv("VITA_NAME", "graves"),
+        vita_name=os.getenv("VITA_NAME", ""),
         gemini_api_key=os.getenv("GEMINI_API_KEY", ""),
         wake_word_ref_dir=os.getenv("WAKE_WORD_REF_DIR", "wakeword/refs"),
         wake_word_threshold=float(os.getenv("WAKE_WORD_THRESHOLD", "0.1")),

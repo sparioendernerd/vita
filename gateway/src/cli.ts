@@ -1,20 +1,12 @@
 #!/usr/bin/env node
 /**
- * vita-cli — Gateway management CLI
- *
- * Usage:
- *   npx tsx src/cli.ts pairing list          — list pending pairing requests
- *   npx tsx src/cli.ts pairing approve <code> [name]  — approve a pairing code
- *   npx tsx src/cli.ts pairing nodes         — list paired nodes
- *   npx tsx src/cli.ts pairing unpair <id>   — remove a paired node
- *   npx tsx src/cli.ts token                 — show the gateway token
- *   npx tsx src/cli.ts token reset           — regenerate the gateway token
- *   npx tsx src/cli.ts doctor                — security audit
- *   npx tsx src/cli.ts config                — show current config
+ * vita-cli - Gateway management CLI
  */
 
 import { resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
+import { createInterface } from "node:readline/promises";
+import { stdin as input, stdout as output } from "node:process";
 import { readFileSync, existsSync, writeFileSync } from "node:fs";
 import dotenv from "dotenv";
 
@@ -36,6 +28,14 @@ import {
   PAIRING_PATH,
 } from "./config/gateway-config.js";
 import { isTailscaleAvailable, getTailscaleIP, getTailscaleHostname } from "./network/tailscale.js";
+import {
+  createLocalVita,
+  formatVitaList,
+  hasLocalVitas,
+  importExistingGraves,
+  listVitaSummaries,
+  readSharedUserProfile,
+} from "./config/spawn-storage.js";
 
 const args = process.argv.slice(2);
 const command = args[0];
@@ -43,19 +43,46 @@ const subcommand = args[1];
 
 function printHelp() {
   console.log(`
-🧠 VITA Gateway CLI
+VITA Gateway CLI
 
 Commands:
-  pairing list              List pending pairing requests
-  pairing approve <code> [name]  Approve a node pairing
-  pairing nodes             List all paired nodes
-  pairing unpair <nodeId>   Remove a paired node
-  token                     Show current gateway token
-  token reset               Generate a new gateway token
-  doctor                    Security audit of your gateway
-  config                    Show current gateway configuration
-  status                    Show gateway status
+  pairing list                    List pending pairing requests
+  pairing approve <code> [name]   Approve a node pairing
+  pairing nodes                   List all paired nodes
+  pairing unpair <nodeId>         Remove a paired node
+  token                           Show current gateway token
+  token reset                     Generate a new gateway token
+  doctor                          Security audit of your gateway
+  config                          Show current gateway configuration
+  status                          Show gateway status
+  spawn init                      Create the first local VITA
+  spawn create                    Create an additional local VITA
+  spawn list                      List local VITAs
+  spawn import-graves             Import legacy Graves into local storage
 `);
+}
+
+async function promptForSpawn(options: { requireSharedProfile: boolean }) {
+  const rl = createInterface({ input, output });
+  try {
+    const name = (await rl.question("VITA name: ")).trim();
+    const personality = (await rl.question("Personality: ")).trim();
+    if (!name || !personality) {
+      throw new Error("Name and personality are required.");
+    }
+
+    let sharedUserProfile: string | undefined;
+    if (options.requireSharedProfile) {
+      sharedUserProfile = (await rl.question("Tell VITA about yourself: ")).trim();
+      if (!sharedUserProfile) {
+        throw new Error("Shared user profile is required for the first VITA.");
+      }
+    }
+
+    return { name, personality, sharedUserProfile };
+  } finally {
+    rl.close();
+  }
 }
 
 async function main() {
@@ -65,13 +92,58 @@ async function main() {
   }
 
   switch (command) {
+    case "spawn": {
+      if (subcommand === "init") {
+        if (hasLocalVitas()) {
+          console.error("Local VITAs already exist. Use `spawn create` instead.");
+          process.exit(1);
+        }
+        const answers = await promptForSpawn({ requireSharedProfile: true });
+        const vita = createLocalVita(answers);
+        console.log(`Created first VITA: ${vita.displayName} (${vita.name})`);
+        return;
+      }
+
+      if (subcommand === "create") {
+        const sharedProfile = readSharedUserProfile();
+        if (!sharedProfile) {
+          console.error("No shared user profile found. Run `spawn init` first.");
+          process.exit(1);
+        }
+        const answers = await promptForSpawn({ requireSharedProfile: false });
+        const vita = createLocalVita(answers);
+        console.log(`Created VITA: ${vita.displayName} (${vita.name})`);
+        return;
+      }
+
+      if (subcommand === "list") {
+        console.log(formatVitaList());
+        const shared = readSharedUserProfile();
+        if (shared) {
+          console.log("");
+          console.log("Shared user profile:");
+          console.log(shared.profile);
+        }
+        return;
+      }
+
+      if (subcommand === "import-graves") {
+        const vita = importExistingGraves();
+        console.log(`Imported ${vita.displayName} (${vita.name}) into local storage.`);
+        return;
+      }
+
+      printHelp();
+      process.exit(1);
+    }
+
     case "pairing": {
       if (!subcommand || subcommand === "list") {
         const pending = listPendingPairings();
         if (pending.length === 0) {
           console.log("No pending pairing requests.");
         } else {
-          console.log(`\n📋 Pending pairing requests (${pending.length}):\n`);
+          console.log(`\nPending pairing requests (${pending.length}):\n`);
           for (const p of pending) {
             console.log(`  Code: ${p.code}  |  Node: ${p.nodeId.substring(0, 12)}...  |  Requested: ${p.requestedAt}`);
             console.log(`  Capabilities: ${p.capabilities.join(", ")}\n`);
@@ -86,9 +158,9 @@ async function main() {
         }
         const result = approvePairing(code, name);
         if (result) {
-          console.log(`✅ Node paired: ${result.name} (${result.nodeId.substring(0, 12)}...)`);
+          console.log(`Node paired: ${result.name} (${result.nodeId.substring(0, 12)}...)`);
         } else {
-          console.error(`❌ No pending pairing with code: ${code}`);
+          console.error(`No pending pairing with code: ${code}`);
           process.exit(1);
         }
       } else if (subcommand === "nodes") {
@@ -96,7 +168,7 @@ async function main() {
         if (nodes.length === 0) {
           console.log("No paired nodes.");
         } else {
-          console.log(`\n🔗 Paired nodes (${nodes.length}):\n`);
+          console.log(`\nPaired nodes (${nodes.length}):\n`);
           for (const n of nodes) {
             console.log(`  ${n.name}`);
             console.log(`    ID: ${n.nodeId.substring(0, 16)}...`);
@@ -112,130 +184,123 @@ async function main() {
           process.exit(1);
         }
         if (unpairNode(nodeId)) {
-          console.log(`✅ Node unpaired: ${nodeId}`);
+          console.log(`Node unpaired: ${nodeId}`);
         } else {
-          console.error(`❌ No paired node with ID: ${nodeId}`);
+          console.error(`No paired node with ID: ${nodeId}`);
         }
       }
-      break;
+      return;
     }
 
     case "token": {
       if (subcommand === "reset") {
         const newToken = generateToken();
         writeFileSync(TOKEN_PATH, newToken, { mode: 0o600 });
-        console.log(`🔑 New token generated: ${newToken}`);
-        console.log(`   Saved to: ${TOKEN_PATH}`);
-        console.log("   ⚠ All connected nodes will need the new token.");
+        console.log(`New token generated: ${newToken}`);
+        console.log(`Saved to: ${TOKEN_PATH}`);
+        console.log("All connected nodes will need the new token.");
       } else {
         const token = loadOrCreateToken();
-        console.log(`🔑 Gateway token: ${token}`);
-        console.log(`   Stored at: ${TOKEN_PATH}`);
+        console.log(`Gateway token: ${token}`);
+        console.log(`Stored at: ${TOKEN_PATH}`);
       }
-      break;
+      return;
     }
 
     case "doctor": {
-      console.log("\n🩺 VITA Gateway Security Audit\n");
+      console.log("\nVITA Gateway Security Audit\n");
       const config = loadGatewayConfig();
       let issues = 0;
       let warnings = 0;
 
-      // Check auth mode
       if (config.gateway.auth.mode === "none") {
-        console.log("  ❌ CRITICAL: Auth mode is 'none' — anyone can connect to the gateway");
+        console.log("  CRITICAL: Auth mode is 'none' - anyone can connect to the gateway");
         issues++;
       } else {
-        console.log(`  ✅ Auth mode: ${config.gateway.auth.mode}`);
+        console.log(`  Auth mode: ${config.gateway.auth.mode}`);
       }
 
-      // Check bind
       if (config.gateway.bind === "lan") {
         if (config.gateway.auth.mode === "none") {
-          console.log("  ❌ CRITICAL: Gateway bound to LAN (0.0.0.0) with no auth!");
+          console.log("  CRITICAL: Gateway bound to LAN (0.0.0.0) with no auth");
           issues++;
         } else {
-          console.log("  ⚠ WARNING: Gateway bound to LAN (0.0.0.0) — ensure firewall is configured");
+          console.log("  WARNING: Gateway bound to LAN (0.0.0.0) - ensure firewall is configured");
           warnings++;
         }
       } else {
-        console.log(`  ✅ Bind: ${config.gateway.bind} (loopback = safe)`);
+        console.log(`  Bind: ${config.gateway.bind} (loopback = safe)`);
       }
 
-      // Check exec
       if (config.tools.exec.enabled) {
         if (config.tools.exec.security === "full") {
-          console.log("  ⚠ WARNING: Command execution enabled with security='full' — any command can run");
+          console.log("  WARNING: Command execution enabled with security='full'");
           warnings++;
         } else {
-          console.log(`  ✅ Exec enabled with security: ${config.tools.exec.security}`);
+          console.log(`  Exec enabled with security: ${config.tools.exec.security}`);
         }
       } else {
-        console.log("  ✅ Exec disabled");
+        console.log("  Exec disabled");
       }
 
-      // Check Tailscale
       if (config.gateway.tailscale.mode === "funnel") {
         if (!config.gateway.auth.password) {
-          console.log("  ❌ CRITICAL: Tailscale Funnel enabled without password auth");
+          console.log("  CRITICAL: Tailscale Funnel enabled without password auth");
           issues++;
         } else {
-          console.log("  ✅ Tailscale Funnel with password auth");
+          console.log("  Tailscale Funnel with password auth");
         }
       } else {
-        console.log(`  ✅ Tailscale: ${config.gateway.tailscale.mode}`);
+        console.log(`  Tailscale: ${config.gateway.tailscale.mode}`);
       }
 
-      // Check token strength
       if (config.gateway.auth.mode === "token") {
         const token = existsSync(TOKEN_PATH) ? readFileSync(TOKEN_PATH, "utf-8").trim() : "";
         if (token.length < 32) {
-          console.log("  ⚠ WARNING: Gateway token is too short (< 32 chars)");
+          console.log("  WARNING: Gateway token is too short (< 32 chars)");
           warnings++;
         } else {
-          console.log("  ✅ Token length OK");
+          console.log("  Token length OK");
         }
       }
 
-      // Check pairing
       const nodes = listPairedNodes();
       const pending = listPendingPairings();
-      console.log(`  ℹ Paired nodes: ${nodes.length}`);
+      console.log(`  Paired nodes: ${nodes.length}`);
+      console.log(`  Local VITAs: ${listVitaSummaries().length}`);
       if (pending.length > 0) {
-        console.log(`  ⚠ Pending pairing requests: ${pending.length}`);
+        console.log(`  Pending pairing requests: ${pending.length}`);
         warnings++;
       }
 
-      // Check Tailscale availability
       console.log("");
-      console.log("  🔍 Tailscale status:");
+      console.log("  Tailscale status:");
       const tsAvailable = isTailscaleAvailable();
       if (tsAvailable) {
-        console.log(`     ✅ Tailscale running (IP: ${getTailscaleIP()}, Host: ${getTailscaleHostname()})`);
+        console.log(`     Tailscale running (IP: ${getTailscaleIP()}, Host: ${getTailscaleHostname()})`);
       } else {
-        console.log("     ℹ Tailscale not detected (install: curl -fsSL https://tailscale.com/install.sh | sh)");
+        console.log("     Tailscale not detected");
       }
 
-      // Config file permissions (Linux-specific)
       console.log("");
       if (issues === 0 && warnings === 0) {
-        console.log("  🎉 No issues found! Gateway is properly secured.\n");
+        console.log("  No issues found.\n");
       } else {
         console.log(`  Summary: ${issues} critical issue(s), ${warnings} warning(s)\n`);
       }
-      break;
+      return;
     }
 
     case "config": {
       const config = loadGatewayConfig();
-      console.log(`\n📋 Gateway Configuration (${CONFIG_PATH}):\n`);
+      console.log(`\nGateway Configuration (${CONFIG_PATH}):\n`);
       console.log(JSON.stringify(config, null, 2));
-      break;
+      return;
     }
 
     case "status": {
       const config = loadGatewayConfig();
-      console.log("\n🧠 VITA Gateway Status\n");
+      console.log("\nVITA Gateway Status\n");
       console.log(`  Config:     ${CONFIG_PATH}`);
       console.log(`  Token:      ${TOKEN_PATH}`);
       console.log(`  Pairings:   ${PAIRING_PATH}`);
@@ -244,6 +309,7 @@ async function main() {
       console.log(`  Auth:       ${config.gateway.auth.mode}`);
       console.log(`  Tailscale:  ${config.gateway.tailscale.mode}`);
       console.log(`  Exec:       ${config.tools.exec.enabled ? config.tools.exec.security : "disabled"}`);
+      console.log(`  VITAs:      ${listVitaSummaries().length}`);
 
       const nodes = listPairedNodes();
       console.log(`  Paired:     ${nodes.length} node(s)`);
@@ -255,7 +321,7 @@ async function main() {
         console.log(`    Host:     ${getTailscaleHostname()}`);
       }
       console.log("");
-      break;
+      return;
     }
 
     default:
@@ -266,6 +332,6 @@ async function main() {
 }
 
 main().catch((err) => {
-  console.error(`Error: ${err}`);
+  console.error(`Error: ${err instanceof Error ? err.message : String(err)}`);
   process.exit(1);
 });

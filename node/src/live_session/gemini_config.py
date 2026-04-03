@@ -21,6 +21,22 @@ def build_system_prompt(vita_config: dict, memories: list[str]) -> str:
         memory_text = "\n".join(f"- {m}" for m in memories)
         parts.append(f"## Your Memories\n{memory_text}")
 
+    shared_profile = vita_config.get("sharedUserProfile")
+    if shared_profile:
+        parts.append(f"## Shared User Profile\n{shared_profile}")
+
+    known_vitas = vita_config.get("knownVitas") or []
+    if known_vitas:
+        vita_lines = []
+        for vita in known_vitas:
+            if isinstance(vita, dict):
+                display = vita.get("displayName") or vita.get("name")
+                name = vita.get("name")
+                if display and name:
+                    vita_lines.append(f"- {display} ({name})")
+        if vita_lines:
+            parts.append("## Other Known VITAs\n" + "\n".join(vita_lines))
+
     # Add tool instructions
     parts.append(
         "## Core Rule: Deactivation\n"
@@ -103,6 +119,72 @@ def build_tool_declarations(vita_config: dict) -> list[dict[str, Any]]:
                     },
                 },
                 "required": ["query"],
+            },
+        },
+        "list_vitas": {
+            "name": "list_vitas",
+            "description": "List the other VITAs known to the gateway.",
+            "parameters": {
+                "type": "object",
+                "properties": {},
+            },
+        },
+        "read_shared_profile": {
+            "name": "read_shared_profile",
+            "description": "Read the shared user profile that all VITAs can access.",
+            "parameters": {
+                "type": "object",
+                "properties": {},
+            },
+        },
+        "send_vita_message": {
+            "name": "send_vita_message",
+            "description": "Leave a durable mailbox message for another VITA.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "to_vita": {
+                        "type": "string",
+                        "description": "Target VITA name.",
+                    },
+                    "subject": {
+                        "type": "string",
+                        "description": "Optional short subject line.",
+                    },
+                    "body": {
+                        "type": "string",
+                        "description": "Message body.",
+                    },
+                },
+                "required": ["to_vita", "body"],
+            },
+        },
+        "read_vita_messages": {
+            "name": "read_vita_messages",
+            "description": "Read mailbox messages left for you by other VITAs.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "status": {
+                        "type": "string",
+                        "enum": ["unread", "read"],
+                        "description": "Optional mailbox status filter.",
+                    },
+                },
+            },
+        },
+        "mark_vita_message_read": {
+            "name": "mark_vita_message_read",
+            "description": "Mark one mailbox message as read.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "message_id": {
+                        "type": "string",
+                        "description": "Mailbox message ID.",
+                    },
+                },
+                "required": ["message_id"],
             },
         },
         "get_current_time": {

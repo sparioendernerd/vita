@@ -1,8 +1,8 @@
 import { z } from "zod";
 import { readFileSync, readdirSync, watchFile, existsSync } from "node:fs";
-import { join } from "node:path";
-import { homedir } from "node:os";
+import { basename, join } from "node:path";
 import { logger } from "../logger.js";
+import { getVitaConfigPath, getVitaDir, getVitaHome } from "./vita-home.js";
 
 const scheduledTaskSchema = z.object({
   id: z.string().optional(),
@@ -44,23 +44,26 @@ export class VitaRegistry {
   private watchedPaths = new Set<string>();
   private listeners = new Set<RegistryListener>();
 
-  constructor(vitasDir: string) {
+  constructor(vitasDir = getVitaHome()) {
     this.vitasDir = vitasDir;
   }
 
   load(): void {
-    const files = readdirSync(this.vitasDir).filter((f) =>
-      f.endsWith(".vita.json")
-    );
+    this.vitas.clear();
+    this.configPaths.clear();
 
-    for (const file of files) {
-      const filePath = join(this.vitasDir, file);
+    const files = readdirSync(this.vitasDir, { withFileTypes: true })
+      .filter((entry) => entry.isDirectory() && entry.name !== "shared")
+      .map((entry) => getVitaConfigPath(entry.name))
+      .filter((filePath) => existsSync(filePath));
+
+    for (const filePath of files) {
       try {
         const raw = JSON.parse(readFileSync(filePath, "utf-8"));
         const config = vitaConfigSchema.parse(raw);
         
         // Load dynamically from ~/.vita/[name]
-        const staticPath = join(homedir(), ".vita", config.name);
+        const staticPath = getVitaDir(config.name);
         if (existsSync(staticPath)) {
           const parts: string[] = [];
           const filesToLoad = ["IDENTITY.md", "SOUL.md", "USER.md", "HEARTBEAT.md", "MEMORY.md"];
@@ -85,7 +88,7 @@ export class VitaRegistry {
         this.configPaths.set(config.name, filePath);
         logger.info(`Loaded VITA: ${config.displayName} (${config.name})`);
       } catch (err) {
-        logger.error(`Failed to load VITA config ${file}: ${err}`);
+        logger.error(`Failed to load VITA config ${filePath}: ${err}`);
       }
     }
 
@@ -138,15 +141,15 @@ export class VitaRegistry {
     }
     
     // Watch new config files
-    const files = readdirSync(this.vitasDir).filter((f) =>
-      f.endsWith(".vita.json")
-    );
-    for (const file of files) {
-      const p = join(this.vitasDir, file);
+    const files = readdirSync(this.vitasDir, { withFileTypes: true })
+      .filter((entry) => entry.isDirectory() && entry.name !== "shared")
+      .map((entry) => getVitaConfigPath(entry.name))
+      .filter((filePath) => existsSync(filePath));
+    for (const p of files) {
       if (!this.watchedPaths.has(p)) {
         this.watchedPaths.add(p);
         watchFile(p, { interval: 2000 }, () => {
-          logger.info(`VITA config changed: ${file}, reloading...`);
+          logger.info(`VITA config changed: ${basename(p)}, reloading...`);
           this.load();
         });
       }
@@ -154,7 +157,7 @@ export class VitaRegistry {
 
     // Watch dynamic subdirectories per VITA
     for (const config of this.vitas.values()) {
-        const staticPath = join(homedir(), ".vita", config.name);
+        const staticPath = getVitaDir(config.name);
         if (existsSync(staticPath)) {
             const filesToLoad = ["IDENTITY.md", "SOUL.md", "USER.md", "HEARTBEAT.md", "MEMORY.md"];
             for (const mdFile of filesToLoad) {

@@ -109,6 +109,8 @@ export interface SessionStartPayload {
 export interface SessionConfigPayload {
   vitaConfig: Record<string, unknown> | null;
   memories: string[];
+  sharedUserProfile?: string;
+  knownVitas?: Array<{ name: string; displayName: string }>;
   error?: string;
 }
 

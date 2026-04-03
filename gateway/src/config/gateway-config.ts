@@ -1,8 +1,7 @@
 import { z } from "zod";
 import { readFileSync, writeFileSync, existsSync, mkdirSync } from "node:fs";
-import { join } from "node:path";
-import { homedir } from "node:os";
 import { logger } from "../logger.js";
+import { ensureVitaHome, getGlobalConfigPath, getGatewayTokenPath, getPairingPath, getVitaHome } from "./vita-home.js";
 
 // ── Schema ────────────────────────────────────────────────────────────────────
 
@@ -61,15 +60,15 @@ export type ExecConfig = z.infer<typeof execConfigSchema>;
 
 // ── Paths ─────────────────────────────────────────────────────────────────────
 
-export const VITA_HOME = join(homedir(), ".vita");
-export const CONFIG_PATH = join(VITA_HOME, "vita.json");
-export const TOKEN_PATH = join(VITA_HOME, "gateway-token");
-export const PAIRING_PATH = join(VITA_HOME, "paired-nodes.json");
+export const VITA_HOME = getVitaHome();
+export const CONFIG_PATH = getGlobalConfigPath();
+export const TOKEN_PATH = getGatewayTokenPath();
+export const PAIRING_PATH = getPairingPath();
 
 // ── Load / Save ───────────────────────────────────────────────────────────────
 
 export function loadGatewayConfig(): GatewayConfig {
-  mkdirSync(VITA_HOME, { recursive: true });
+  mkdirSync(ensureVitaHome(), { recursive: true });
 
   let raw: Record<string, unknown> = {};
   if (existsSync(CONFIG_PATH)) {
@@ -106,7 +105,7 @@ export function loadGatewayConfig(): GatewayConfig {
 }
 
 export function saveGatewayConfig(config: GatewayConfig): void {
-  mkdirSync(VITA_HOME, { recursive: true });
+  mkdirSync(ensureVitaHome(), { recursive: true });
   writeFileSync(CONFIG_PATH, JSON.stringify(config, null, 2), "utf-8");
   logger.info(`Saved gateway config to ${CONFIG_PATH}`);
 }

@@ -24,6 +24,7 @@ import { ingestContent } from "../knowledge/ingest.js";
 import type { GatewayConfig } from "../config/gateway-config.js";
 import type { DiscordBridge } from "../discord/bridge.js";
 import { addScheduledTask, listScheduledTasks, removeScheduledTask } from "../scheduler/task-config.js";
+import { listVitaSummaries, markMailboxMessageRead, readMailboxMessages, readSharedUserProfile, sendMailboxMessage } from "../config/spawn-storage.js";
 
 export type MessageHandler = (node: NodeConnection, msg: ProtocolMessage) => void;
 export type MessageHandlers = Record<string, MessageHandler>;
@@ -58,6 +59,8 @@ export function createHandlers(
 
       const store = getMemoryStore(vita.name, geminiApiKey);
       const memories: string[] = store.getSessionContext(vita.name, 12).map((m) => m.content);
+      const sharedProfile = readSharedUserProfile();
+      const knownVitas = listVitaSummaries();
 
       // Track session
       const sessionId = `${Date.now()}-${Math.random().toString(36).substring(2, 6)}`;
@@ -65,7 +68,16 @@ export function createHandlers(
 
       server.sendToNode(
         node.id,
-        createMessage("session:config", { vitaConfig: vita, memories })
+        createMessage("session:config", {
+          vitaConfig: {
+            ...vita,
+            sharedUserProfile: sharedProfile?.profile,
+            knownVitas,
+          },
+          memories,
+          sharedUserProfile: sharedProfile?.profile,
+          knownVitas,
+        })
       );
     },
 
@@ -221,6 +233,39 @@ export function createHandlers(
             result = removed
               ? { success: true, removedId: payload.args.id }
               : { success: false, error: `No scheduled task found with id '${payload.args.id as string}'.` };
+          } else if (payload.toolName === "list_vitas") {
+            result = {
+              vitas: listVitaSummaries(),
+            };
+          } else if (payload.toolName === "read_shared_profile") {
+            result = {
+              sharedProfile: readSharedUserProfile(),
+            };
+          } else if (payload.toolName === "send_vita_message") {
+            result = {
+              success: true,
+              message: sendMailboxMessage({
+                fromVita: node.vitaName,
+                toVita: payload.args.to_vita as string,
+                subject: payload.args.subject as string | undefined,
+                body: payload.args.body as string,
+              }),
+            };
+          } else if (payload.toolName === "read_vita_messages") {
+            result = {
+              messages: readMailboxMessages(
+                node.vitaName,
+                payload.args.status as "unread" | "read" | undefined
+              ),
+            };
+          } else if (payload.toolName === "mark_vita_message_read") {
+            result = {
+              success: true,
+              message: markMailboxMessageRead(
+                node.vitaName,
+                payload.args.message_id as string
+              ),
+            };
           } else {
             result = { message: `Unknown tool: ${payload.toolName}` };
           }

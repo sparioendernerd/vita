@@ -8,7 +8,6 @@ import {
   type User,
 } from "discord.js";
 import { existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
-import { homedir } from "node:os";
 import { basename, join, resolve } from "node:path";
 import { spawn } from "node:child_process";
 import type { VitaRegistry, VitaConfig } from "../config/vita-registry.js";
@@ -23,6 +22,8 @@ import { ingestContent } from "../knowledge/ingest.js";
 import { makeTextModelFn } from "../gemini/text-client.js";
 import type { GatewayServer } from "../websocket/server.js";
 import type { GatewayConfig } from "../config/gateway-config.js";
+import { getVitaDir } from "../config/vita-home.js";
+import { listVitaSummaries, markMailboxMessageRead, readMailboxMessages, readSharedUserProfile, sendMailboxMessage } from "../config/spawn-storage.js";
 
 interface DiscordBridgeOptions {
   token: string;
@@ -428,7 +429,7 @@ export class DiscordBridge {
     limit: number
   ): Promise<TranscriptTurn[]> {
     const date = new Date().toISOString().split("T")[0];
-    const transcriptPath = join(homedir(), ".vita", vitaName, "sessions", date, `${sessionId}.jsonl`);
+    const transcriptPath = join(getVitaDir(vitaName), "sessions", date, `${sessionId}.jsonl`);
 
     if (!existsSync(transcriptPath)) {
       return [];
@@ -564,6 +565,50 @@ export class DiscordBridge {
             limit: { type: "number" },
           },
           required: ["query"],
+        },
+      },
+      list_vitas: {
+        name: "list_vitas",
+        description: "List known VITAs.",
+        parametersJsonSchema: { type: "object", properties: {} },
+      },
+      read_shared_profile: {
+        name: "read_shared_profile",
+        description: "Read the shared user profile.",
+        parametersJsonSchema: { type: "object", properties: {} },
+      },
+      send_vita_message: {
+        name: "send_vita_message",
+        description: "Leave a durable mailbox message for another VITA.",
+        parametersJsonSchema: {
+          type: "object",
+          properties: {
+            to_vita: { type: "string" },
+            subject: { type: "string" },
+            body: { type: "string" },
+          },
+          required: ["to_vita", "body"],
+        },
+      },
+      read_vita_messages: {
+        name: "read_vita_messages",
+        description: "Read mailbox messages sent to this VITA.",
+        parametersJsonSchema: {
+          type: "object",
+          properties: {
+            status: { type: "string", enum: ["unread", "read"] },
+          },
+        },
+      },
+      mark_vita_message_read: {
+        name: "mark_vita_message_read",
+        description: "Mark a mailbox message as read.",
+        parametersJsonSchema: {
+          type: "object",
+          properties: {
+            message_id: { type: "string" },
+          },
+          required: ["message_id"],
         },
       },
       consolidate_memories: {
@@ -790,6 +835,44 @@ export class DiscordBridge {
             String(args.query ?? ""),
             typeof args.limit === "number" ? args.limit : undefined
           ),
+        };
+      }
+
+      if (toolName === "list_vitas") {
+        return { vitas: listVitaSummaries() };
+      }
+
+      if (toolName === "read_shared_profile") {
+        return { sharedProfile: readSharedUserProfile() };
+      }
+
+      if (toolName === "send_vita_message") {
+        return {
+          success: true,
+          message: sendMailboxMessage({
+            fromVita: vita.name,
+            toVita: String(args.to_vita ?? ""),
+            subject: typeof args.subject === "string" ? args.subject : undefined,
+            body: String(args.body ?? ""),
+          }),
+        };
+      }
+
+      if (toolName === "read_vita_messages") {
+        return {
+          messages: readMailboxMessages(
+            vita.name,
+            args.status === "unread" || args.status === "read"
+              ? args.status
+              : undefined
+          ),
+        };
+      }
+
+      if (toolName === "mark_vita_message_read") {
+        return {
+          success: true,
+          message: markMailboxMessageRead(vita.name, String(args.message_id ?? "")),
         };
       }
 
