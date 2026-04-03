@@ -9,7 +9,10 @@ const DEFAULT_TIMEOUT = 30000;
 const MAX_TIMEOUT = 5 * 60 * 1000;
 const MAX_OUTPUT = 50000;
 const __dirname = dirname(fileURLToPath(import.meta.url));
-export const SCRIPTS_ROOT = resolve(__dirname, "../../../scripts");
+const DEFAULT_SCRIPTS_ROOT = resolve(__dirname, "../../../scripts");
+export const SCRIPTS_ROOT = process.env.VITA_SCRIPTS_ROOT
+  ? resolve(process.env.VITA_SCRIPTS_ROOT)
+  : DEFAULT_SCRIPTS_ROOT;
 
 const scriptArgSchema = z.object({
   name: z.string().regex(/^[a-zA-Z][a-zA-Z0-9_-]*$/),
