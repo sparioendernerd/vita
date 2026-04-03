@@ -16,6 +16,12 @@ import type { SharedScheduleTask } from "../config/spawn-storage.js";
 const MAX_TOOL_STEPS = 8;
 
 type ToolExecutor = (args: Record<string, unknown>) => Promise<unknown>;
+export interface ExecutableAgentTask {
+  id?: string;
+  action: string;
+  description?: string;
+  tools?: string[];
+}
 
 export interface ScheduledTaskRunnerDeps {
   vitaRegistry: VitaRegistry;
@@ -28,7 +34,7 @@ export interface ScheduledTaskRunnerDeps {
 export class ScheduledTaskRunner {
   constructor(private readonly deps: ScheduledTaskRunnerDeps) {}
 
-  async runTask(vita: VitaConfig, task: SharedScheduleTask): Promise<string> {
+  async runTask(vita: VitaConfig, task: ExecutableAgentTask): Promise<string> {
     const ai = new GoogleGenAI({ apiKey: this.deps.geminiApiKey });
     const tools = this.buildTools(vita, task);
     const executors = this.buildExecutors(vita);
@@ -108,7 +114,7 @@ export class ScheduledTaskRunner {
     return finalText || "Scheduled task stopped after reaching the tool step limit.";
   }
 
-  private buildTools(vita: VitaConfig, task: SharedScheduleTask): any[] {
+  private buildTools(vita: VitaConfig, task: ExecutableAgentTask): any[] {
     const enabledTools = new Set(task.tools?.length ? task.tools.filter((tool) => !isToolBlocked(vita, tool)) : getAvailableToolNames(vita));
     const tools: any[] = [];
     const functionTools: any[] = [];

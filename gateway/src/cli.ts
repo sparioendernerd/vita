@@ -41,6 +41,12 @@ import {
   readSharedUserProfile,
   writeVitaSecrets,
 } from "./config/spawn-storage.js";
+import {
+  cancelBackgroundTask,
+  getBackgroundTask,
+  listBackgroundTasks,
+  type BackgroundTaskStatus,
+} from "./background/store.js";
 
 const args = process.argv.slice(2);
 const command = args[0];
@@ -66,6 +72,9 @@ Commands:
   spawn import-graves             Import legacy Graves into local storage
   spawn migrate-config <name>     Rewrite an existing local VITA config to the current format
   spawn set-discord-token <name>  Store or replace a per-VITA Discord bot token
+  tasks list [vita] [status]      List background tasks, optionally filtered by VITA and status
+  tasks show <id>                 Show one background task in detail
+  tasks cancel <id> <vita>        Cancel a queued background task owned by that VITA
 `);
 }
 
@@ -127,6 +136,29 @@ async function promptForDiscordToken(vitaName: string): Promise<string> {
   } finally {
     rl.close();
   }
+}
+
+function isBackgroundTaskStatus(value: string | undefined): value is BackgroundTaskStatus {
+  return value === "queued" || value === "running" || value === "completed" || value === "failed" || value === "cancelled";
+}
+
+function formatBackgroundTaskList(vitaName?: string, status?: BackgroundTaskStatus): string {
+  const tasks = listBackgroundTasks(vitaName, status);
+  if (!tasks.length) {
+    return "No background tasks found.";
+  }
+
+  return tasks.map((task) => {
+    const summary = task.resultSummary || task.error || task.goal;
+    return [
+      `- ${task.id}`,
+      `  vita: ${task.vitaName}`,
+      `  status: ${task.status}`,
+      `  title: ${task.title}`,
+      `  created: ${task.createdAt}`,
+      `  summary: ${summary}`,
+    ].join("\n");
+  }).join("\n");
 }
 
 async function main() {
@@ -284,6 +316,45 @@ async function main() {
         console.log(`Stored at: ${TOKEN_PATH}`);
       }
       return;
+    }
+
+    case "tasks": {
+      if (!subcommand || subcommand === "list") {
+        const maybeVita = args[2];
+        const maybeStatus = args[3];
+        console.log(formatBackgroundTaskList(maybeVita, isBackgroundTaskStatus(maybeStatus) ? maybeStatus : undefined));
+        return;
+      }
+
+      if (subcommand === "show") {
+        const taskId = args[2];
+        if (!taskId) {
+          console.error("Usage: tasks show <id>");
+          process.exit(1);
+        }
+        const task = getBackgroundTask(taskId);
+        if (!task) {
+          console.error(`No background task found with id '${taskId}'.`);
+          process.exit(1);
+        }
+        console.log(JSON.stringify(task, null, 2));
+        return;
+      }
+
+      if (subcommand === "cancel") {
+        const taskId = args[2];
+        const vitaName = args[3];
+        if (!taskId || !vitaName) {
+          console.error("Usage: tasks cancel <id> <vita>");
+          process.exit(1);
+        }
+        const task = cancelBackgroundTask(taskId, vitaName);
+        console.log(`Cancelled background task ${task.id} for ${task.vitaName}.`);
+        return;
+      }
+
+      printHelp();
+      process.exit(1);
     }
 
     case "doctor": {

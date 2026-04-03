@@ -26,6 +26,7 @@ import type { DiscordBridgeManager } from "../discord/bridge.js";
 import { addScheduledTask, listScheduledTasks, removeScheduledTask } from "../scheduler/task-config.js";
 import { listVitaSummaries, markMailboxMessageRead, readMailboxMessages, readSharedUserProfile, sendMailboxMessage } from "../config/spawn-storage.js";
 import { isToolBlocked } from "../tools/catalog.js";
+import { cancelBackgroundTask, getBackgroundTask, listBackgroundTasks, startBackgroundTask } from "../background/store.js";
 
 export type MessageHandler = (node: NodeConnection, msg: ProtocolMessage) => void;
 export type MessageHandlers = Record<string, MessageHandler>;
@@ -275,6 +276,39 @@ export function createHandlers(
               message: markMailboxMessageRead(
                 node.vitaName,
                 payload.args.message_id as string
+              ),
+            };
+          } else if (payload.toolName === "start_background_task") {
+            result = {
+              success: true,
+              task: startBackgroundTask({
+                vitaName: node.vitaName,
+                title: payload.args.title as string | undefined,
+                goal: payload.args.goal as string,
+                description: payload.args.description as string | undefined,
+                tools: payload.args.tools as string[] | undefined,
+              }),
+            };
+          } else if (payload.toolName === "list_background_tasks") {
+            result = {
+              tasks: listBackgroundTasks(
+                node.vitaName,
+                payload.args.status as "queued" | "running" | "completed" | "failed" | "cancelled" | undefined
+              ),
+            };
+          } else if (payload.toolName === "get_background_task") {
+            result = {
+              task: getBackgroundTask(
+                payload.args.id as string,
+                node.vitaName
+              ),
+            };
+          } else if (payload.toolName === "cancel_background_task") {
+            result = {
+              success: true,
+              task: cancelBackgroundTask(
+                payload.args.id as string,
+                node.vitaName
               ),
             };
           } else {

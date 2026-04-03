@@ -40,6 +40,10 @@ export function getSharedSchedulePath(): string {
   return join(getSharedDir(), "schedule.json");
 }
 
+export function getBackgroundTasksPath(): string {
+  return join(getSharedDir(), "background-tasks.json");
+}
+
 export function getVitaDir(vitaName: string): string {
   return join(getVitaHome(), vitaName);
 }

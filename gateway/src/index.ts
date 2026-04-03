@@ -16,6 +16,7 @@ import { existsSync } from "node:fs";
 import { logger } from "./logger.js";
 import { DiscordBridgeManager } from "./discord/bridge.js";
 import { VitaScheduler } from "./scheduler/index.js";
+import { BackgroundTaskRunner } from "./background/runner.js";
 
 // ── Environment Setup ────────────────────────────────────────────────────────
 // Try loading .env from root, then from current directory
@@ -115,6 +116,14 @@ async function main() {
   discordBridge?.attachGateway(server, config);
   const scheduler = new VitaScheduler(vitaRegistry, server, geminiApiKey, config, discordBridge);
   scheduler.start();
+  const backgroundTasks = new BackgroundTaskRunner({
+    vitaRegistry,
+    server,
+    geminiApiKey,
+    gatewayConfig: config,
+    discordBridge,
+  });
+  backgroundTasks.start();
 
   // Heartbeat ping every 30 seconds
   setInterval(() => {
@@ -141,6 +150,7 @@ async function main() {
     teardownTailscale(config.gateway.tailscale);
     void discordBridge?.stop();
     scheduler.stop();
+    backgroundTasks.stop();
     server.close();
     process.exit(0);
   };

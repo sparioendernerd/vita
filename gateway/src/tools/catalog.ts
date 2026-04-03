@@ -35,6 +35,10 @@ export const GLOBAL_TOOL_NAMES = [
   "send_vita_message",
   "read_vita_messages",
   "mark_vita_message_read",
+  "start_background_task",
+  "list_background_tasks",
+  "get_background_task",
+  "cancel_background_task",
 ] as const;
 
 export type GlobalToolName = (typeof GLOBAL_TOOL_NAMES)[number];

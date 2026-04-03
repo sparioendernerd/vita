@@ -25,6 +25,7 @@ import type { GatewayConfig } from "../config/gateway-config.js";
 import { getVitaDir } from "../config/vita-home.js";
 import { listVitaSummaries, markMailboxMessageRead, readMailboxMessages, readSharedUserProfile, readVitaSecrets, sendMailboxMessage } from "../config/spawn-storage.js";
 import { getAvailableToolNames, isToolBlocked } from "../tools/catalog.js";
+import { cancelBackgroundTask, getBackgroundTask, listBackgroundTasks, startBackgroundTask } from "../background/store.js";
 
 interface DiscordBridgeOptions {
   token: string;
@@ -424,6 +425,10 @@ class DiscordBridgeInstance {
       " Once clear, briefly state what you will build, start the Codex script creation job in the background, and tell him you will report back when it finishes." +
       " Do not wait silently for long-running code generation jobs."
     );
+    parts.push(
+      "If a request is complex, multi-step, or likely to take more than a short burst of tool use, prefer `start_background_task`." +
+      " Tell Mr Vailen you'll get on it and report back when the task is done."
+    );
 
     return parts.join("\n\n");
   }
@@ -614,6 +619,52 @@ class DiscordBridgeInstance {
             message_id: { type: "string" },
           },
           required: ["message_id"],
+        },
+      },
+      start_background_task: {
+        name: "start_background_task",
+        description: "Queue a one-off background task for yourself and report back when it finishes.",
+        parametersJsonSchema: {
+          type: "object",
+          properties: {
+            title: { type: "string" },
+            goal: { type: "string" },
+            description: { type: "string" },
+            tools: { type: "array", items: { type: "string" } },
+          },
+          required: ["goal"],
+        },
+      },
+      list_background_tasks: {
+        name: "list_background_tasks",
+        description: "List your background tasks.",
+        parametersJsonSchema: {
+          type: "object",
+          properties: {
+            status: { type: "string", enum: ["queued", "running", "completed", "failed", "cancelled"] },
+          },
+        },
+      },
+      get_background_task: {
+        name: "get_background_task",
+        description: "Get one of your background tasks by ID.",
+        parametersJsonSchema: {
+          type: "object",
+          properties: {
+            id: { type: "string" },
+          },
+          required: ["id"],
+        },
+      },
+      cancel_background_task: {
+        name: "cancel_background_task",
+        description: "Cancel one of your queued background tasks by ID.",
+        parametersJsonSchema: {
+          type: "object",
+          properties: {
+            id: { type: "string" },
+          },
+          required: ["id"],
         },
       },
       consolidate_memories: {
@@ -881,6 +932,43 @@ class DiscordBridgeInstance {
         return {
           success: true,
           message: markMailboxMessageRead(vita.name, String(args.message_id ?? "")),
+        };
+      }
+
+      if (toolName === "start_background_task") {
+        return {
+          success: true,
+          task: startBackgroundTask({
+            vitaName: vita.name,
+            title: typeof args.title === "string" ? args.title : undefined,
+            goal: String(args.goal ?? ""),
+            description: typeof args.description === "string" ? args.description : undefined,
+            tools: Array.isArray(args.tools) ? args.tools.map(String) : undefined,
+          }),
+        };
+      }
+
+      if (toolName === "list_background_tasks") {
+        return {
+          tasks: listBackgroundTasks(
+            vita.name,
+            args.status === "queued" || args.status === "running" || args.status === "completed" || args.status === "failed" || args.status === "cancelled"
+              ? args.status
+              : undefined
+          ),
+        };
+      }
+
+      if (toolName === "get_background_task") {
+        return {
+          task: getBackgroundTask(String(args.id ?? ""), vita.name),
+        };
+      }
+
+      if (toolName === "cancel_background_task") {
+        return {
+          success: true,
+          task: cancelBackgroundTask(String(args.id ?? ""), vita.name),
         };
       }
 

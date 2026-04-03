@@ -21,6 +21,12 @@ import { VitaRegistry } from "../dist/config/vita-registry.js";
 import { ensureSpawnInitialized } from "../dist/config/startup-check.js";
 import { closeAllMemoryStores, getMemoryStore } from "../dist/memory/index.js";
 import { addScheduledTask, listScheduledTasks, removeScheduledTask } from "../dist/scheduler/store.js";
+import {
+  cancelBackgroundTask,
+  getBackgroundTask,
+  listBackgroundTasks,
+  startBackgroundTask,
+} from "../dist/background/store.js";
 
 function spawnInput(name, personality, extra = {}) {
   return {
@@ -141,6 +147,20 @@ await withTempHome("shared-schedule", () => {
   assert.equal(loadSharedScheduleFile().tasks.length, 1);
   assert.equal(removeScheduledTask(registry, "alpha", task.id), true);
   assert.equal(listScheduledTasks(registry, "alpha").length, 0);
+});
+
+await withTempHome("background-tasks", () => {
+  createLocalVita({ ...spawnInput("alpha", "Calm."), sharedUserProfile: "Shared profile." });
+  const task = startBackgroundTask({
+    vitaName: "alpha",
+    title: "Morning brief",
+    goal: "Handle the morning brief pipeline and report back.",
+  });
+  assert.equal(task.status, "queued");
+  assert.equal(listBackgroundTasks("alpha").length, 1);
+  assert.equal(getBackgroundTask(task.id, "alpha")?.title, "Morning brief");
+  const cancelled = cancelBackgroundTask(task.id, "alpha");
+  assert.equal(cancelled.status, "cancelled");
 });
 
 await withTempHome("graves-migration", (home) => {

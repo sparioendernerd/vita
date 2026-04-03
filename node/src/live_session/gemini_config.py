@@ -54,6 +54,12 @@ def build_system_prompt(vita_config: dict, memories: list[str]) -> str:
         "Clarification: Both modes share a 1-minute timeout. Calling one switches the source from the other. \n"
         "Vision/Screenshare stays ON automatically for 1 minute. Do NOT call `disable_vision` yourself unless Mr Vailen explicitly says 'stop looking', 'stop sharing', or 'close your eye'. Otherwise, just let the timer handle it."
     )
+    parts.append(
+        "## Core Rule: Background Work\n"
+        "If Mr Vailen asks for a complex, multi-step, or long-running task that does not need to finish inside this live exchange, prefer `start_background_task`.\n"
+        "When you do that, briefly confirm that you'll handle it and report back when it's done.\n"
+        "Use recurring `schedule_task` only for repeated jobs. Use `start_background_task` for one-off async work."
+    )
 
     return "\n\n".join(parts)
 
@@ -411,6 +417,59 @@ def build_tool_declarations(vita_config: dict) -> list[dict[str, Any]]:
                         "type": "string",
                         "description": "The scheduled task ID returned by list_scheduled_tasks.",
                     }
+                },
+                "required": ["id"],
+            },
+        },
+        "start_background_task": {
+            "name": "start_background_task",
+            "description": "Queue a one-off background task for yourself. Use this for complex or long-running work that should continue after this conversation turn.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "title": {"type": "string", "description": "Short label for the task."},
+                    "goal": {"type": "string", "description": "What you should accomplish."},
+                    "description": {"type": "string", "description": "Optional extra context."},
+                    "tools": {
+                        "type": "array",
+                        "items": {"type": "string"},
+                        "description": "Optional subset of tools the task may use.",
+                    },
+                },
+                "required": ["goal"],
+            },
+        },
+        "list_background_tasks": {
+            "name": "list_background_tasks",
+            "description": "List your background tasks.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "status": {
+                        "type": "string",
+                        "enum": ["queued", "running", "completed", "failed", "cancelled"],
+                    },
+                },
+            },
+        },
+        "get_background_task": {
+            "name": "get_background_task",
+            "description": "Get one of your background tasks by ID.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "id": {"type": "string"},
+                },
+                "required": ["id"],
+            },
+        },
+        "cancel_background_task": {
+            "name": "cancel_background_task",
+            "description": "Cancel one of your queued background tasks by ID.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "id": {"type": "string"},
                 },
                 "required": ["id"],
             },
