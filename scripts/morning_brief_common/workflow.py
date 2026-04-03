@@ -301,7 +301,7 @@ def build_script(config: MorningBriefConfig, date_key: str) -> dict[str, Any]:
         "date": date_key,
     }
 
-    script_text = _build_brief_text(brief_context)
+    script_text = _build_brief_text(config, brief_context)
     if config.gemini_api_key:
         try:
             script_text = _polish_brief_with_gemini(config, brief_context)
@@ -463,7 +463,8 @@ def _select_song_with_gemini(
         for index, track in enumerate(tracks[:20])
     ]
     prompt = (
-        "You are Graves choosing a wake-up song for Mr Vailen.\n"
+        f"You are {config.vita_display_name} choosing a wake-up song for Mr Vailen.\n"
+        f"{_persona_prompt_suffix(config)}\n"
         "Use the mood of today's work, yesterday's accomplishments, the weather, and recent play history.\n"
         "Avoid anything that feels like a repeat of yesterday.\n"
         "Return JSON with keys 'selected_index' and 'selection_reason'.\n\n"
@@ -482,7 +483,8 @@ def _select_song_with_gemini(
 def _polish_brief_with_gemini(config: MorningBriefConfig, brief_context: dict[str, Any]) -> str:
     client = GeminiClient(config.gemini_api_key or "", config.text_model, config.tts_model)
     prompt = (
-        "You are Graves, Mr Vailen's deadpan technical co-host.\n"
+        f"You are {config.vita_display_name}, Mr Vailen's voice assistant.\n"
+        f"{_persona_prompt_suffix(config)}\n"
         "Write a concise spoken morning brief in this exact order:\n"
         "1. greeting\n"
         "2. what song played\n"
@@ -499,7 +501,7 @@ def _polish_brief_with_gemini(config: MorningBriefConfig, brief_context: dict[st
     return normalize_whitespace(text.replace("\n", " "))
 
 
-def _build_brief_text(brief_context: dict[str, Any]) -> str:
+def _build_brief_text(config: MorningBriefConfig, brief_context: dict[str, Any]) -> str:
     song = brief_context.get("song", {})
     weather = brief_context.get("weather", {})
     news = brief_context.get("news", [])
@@ -552,7 +554,12 @@ def _build_brief_text(brief_context: dict[str, Any]) -> str:
         pieces.append("News worth your attention: " + " ".join(news_lines[:2]))
     pieces.append("Yesterday we managed " + ", ".join(yesterday[:3]) + ".")
     pieces.append("Today the main targets are " + ", ".join(today[:3]) + ".")
-    pieces.append("Nothing absurdly glamorous, but quite solid work all the same. Let's get after it.")
+    signoff = "Let's get after it."
+    if config.vita_display_name.lower() == "graves":
+        signoff = "Nothing absurdly glamorous, but quite solid work all the same. Let's get after it."
+    elif config.vita_personality.strip():
+        signoff = f"In {config.vita_display_name}'s estimation, that's a respectable starting point. Let's get after it."
+    pieces.append(signoff)
     return " ".join(normalize_whitespace(part) for part in pieces)
 
 
@@ -659,8 +666,8 @@ def _speak_brief(config: MorningBriefConfig, daily_dir: Path, script_text: str) 
         raise GeminiError("GEMINI_API_KEY is required for Morning Brief TTS.")
     client = GeminiClient(config.gemini_api_key, config.text_model, config.tts_model)
     tts_prompt = (
-        "Speak this as Graves, a dry British co-host with a calm, posh delivery. "
-        "Keep the pacing natural and conversational.\n\n"
+        f"Speak this as {config.vita_display_name}. "
+        f"{_voice_prompt_suffix(config)}\n\n"
         + script_text
     )
     pcm_bytes = client.generate_tts(tts_prompt, voice_name=config.tts_voice_name)
@@ -675,7 +682,26 @@ def _speak_brief(config: MorningBriefConfig, daily_dir: Path, script_text: str) 
         "status": "ok",
         "audio_path": str(audio_path),
         "player": play_result,
+        "voice_name": config.tts_voice_name,
     }
+
+
+def _persona_prompt_suffix(config: MorningBriefConfig) -> str:
+    personality = normalize_whitespace(config.vita_personality)
+    voice_prompt = normalize_whitespace(config.vita_voice_prompt)
+    parts = []
+    if personality:
+        parts.append(f"Personality: {personality}")
+    if voice_prompt:
+        parts.append(f"Voice guidance: {voice_prompt}")
+    return " ".join(parts) if parts else "Keep the tone natural, supportive, and consistent with the active VITA."
+
+
+def _voice_prompt_suffix(config: MorningBriefConfig) -> str:
+    voice_prompt = normalize_whitespace(config.vita_voice_prompt)
+    if voice_prompt:
+        return f"Use this delivery guidance: {voice_prompt} Keep the pacing natural and conversational."
+    return "Keep the pacing natural and conversational, matching the active VITA's established delivery."
 
 
 def _play_audio_file(config: MorningBriefConfig, audio_path: Path) -> dict[str, Any]:

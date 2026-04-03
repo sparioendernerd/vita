@@ -913,7 +913,8 @@ class DiscordBridgeInstance {
         const result = await runScript(
           String(args.name ?? ""),
           isRecord(args.args) ? args.args : {},
-          typeof args.timeout === "number" ? args.timeout : undefined
+          typeof args.timeout === "number" ? args.timeout : undefined,
+          { env: { VITA_NAME: vita.name } }
         );
         return { ...result };
       }

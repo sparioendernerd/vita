@@ -11,6 +11,9 @@ from .utils import ensure_dir, now_in_timezone, resolve_env_path
 @dataclass(frozen=True)
 class MorningBriefConfig:
     vita_name: str
+    vita_display_name: str
+    vita_personality: str
+    vita_voice_prompt: str
     playlist_url: str
     playlist_id: str
     vault_path_gateway: str
@@ -45,17 +48,24 @@ def load_config() -> MorningBriefConfig:
     scripts_root = common_root.parent
     runtime_root = scripts_root / "morning_brief_runtime"
     local_config_path = common_root / "config.json"
-    gateway_vita_config_path = scripts_root.parent / "gateway" / "data" / "vitas" / "default.vita.json"
-
     raw = json.loads(local_config_path.read_text(encoding="utf-8"))
+    vita_name = os.environ.get("VITA_NAME", str(raw.get("vita_name") or "graves")).strip().lower()
+    gateway_vita_config_path = Path.home() / ".vita" / vita_name / "config.json"
 
     text_model = "gemini-3-flash-preview"
-    tts_voice_name = raw.get("tts_voice_name", "Algieba")
+    tts_voice_name = str(raw.get("tts_voice_name", "Algieba"))
+    env_tts_voice_name = os.environ.get("MORNING_BRIEF_TTS_VOICE", "").strip()
+    vita_display_name = vita_name.replace("_", " ").title()
+    vita_personality = ""
+    vita_voice_prompt = ""
     if gateway_vita_config_path.exists():
         try:
             vita_raw = json.loads(gateway_vita_config_path.read_text(encoding="utf-8"))
             text_model = str(vita_raw.get("textModel") or text_model)
             tts_voice_name = str(vita_raw.get("voiceName") or tts_voice_name)
+            vita_display_name = str(vita_raw.get("displayName") or vita_display_name)
+            vita_personality = str(vita_raw.get("personality") or "")
+            vita_voice_prompt = str(vita_raw.get("voicePrompt") or "")
         except Exception:
             pass
 
@@ -66,7 +76,10 @@ def load_config() -> MorningBriefConfig:
     ensure_dir(runtime_root)
 
     return MorningBriefConfig(
-        vita_name=str(raw["vita_name"]),
+        vita_name=vita_name,
+        vita_display_name=vita_display_name,
+        vita_personality=vita_personality,
+        vita_voice_prompt=vita_voice_prompt,
         playlist_url=str(raw["playlist_url"]),
         playlist_id=str(raw["playlist_id"]),
         vault_path_gateway=vault_gateway,
@@ -86,7 +99,7 @@ def load_config() -> MorningBriefConfig:
         playback_buffer_seconds=int(os.environ.get("MORNING_BRIEF_PLAYBACK_BUFFER", str(raw["playback_buffer_seconds"]))),
         audio_player_command=os.environ.get("MORNING_BRIEF_AUDIO_PLAYER", str(raw["audio_player_command"])),
         tts_model=os.environ.get("MORNING_BRIEF_TTS_MODEL", str(raw["tts_model"])),
-        tts_voice_name=os.environ.get("MORNING_BRIEF_TTS_VOICE", tts_voice_name),
+        tts_voice_name=tts_voice_name if gateway_vita_config_path.exists() else (env_tts_voice_name or tts_voice_name),
         scripts_root=scripts_root,
         runtime_root=runtime_root,
         local_config_path=local_config_path,

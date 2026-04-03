@@ -87,7 +87,8 @@ export function listScripts(): ScriptSummary[] {
 export async function runScript(
   name: string,
   providedArgs: Record<string, unknown> = {},
-  timeoutOverride?: number
+  timeoutOverride?: number,
+  options?: { env?: Record<string, string | undefined> }
 ): Promise<RunScriptResult> {
   const script = loadScriptByName(name);
   if (!script.manifest.enabled) {
@@ -106,9 +107,12 @@ export async function runScript(
     : script.manifest.timeoutMs;
 
   return new Promise((resolvePromise) => {
+    const extraEnv = Object.fromEntries(
+      Object.entries(options?.env ?? {}).filter((entry): entry is [string, string] => typeof entry[1] === "string")
+    );
     const child = spawn(command[0], command.slice(1), {
       cwd,
-      env: { ...process.env, VITA_SCRIPT_NAME: script.manifest.name, VITA_SCRIPT_DIR: script.scriptDir },
+      env: { ...process.env, ...extraEnv, VITA_SCRIPT_NAME: script.manifest.name, VITA_SCRIPT_DIR: script.scriptDir },
       shell: false,
       windowsHide: true,
     });
